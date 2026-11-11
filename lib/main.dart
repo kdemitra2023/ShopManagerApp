@@ -87,7 +87,7 @@ class _ShopMainViewState extends State<ShopMainView> {
             Text('राशि: ₹$amt', style: const TextStyle(fontSize: 18, color: Colors.green, fontWeight: FontWeight.bold)),
             Text('UPI ID: $shopUpi', style: const TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 10),
-            Image.network(img, height: 180, width: 180, errorBuilder: (c, e, s) => const Text('QR एरर')),
+            Image.network(img, height: 180, width: 180, errorBuilder: (c, e, s) => const Text('QR लोड विफल')),
           ],
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें'))],
@@ -219,7 +219,6 @@ class _ShopMainViewState extends State<ShopMainView> {
     return _tabExams();
   }
 
-  // 1. खाता स्क्रीन
   Widget _tabKhata() {
     double totalDue = 0;
     for (var k in khata) {
@@ -306,7 +305,6 @@ class _ShopMainViewState extends State<ShopMainView> {
     );
   }
 
-  // 2. कैश / बैंक स्क्रीन
   Widget _tabCash() {
     double getBal(String acc) {
       double b = 0;
@@ -387,7 +385,6 @@ class _ShopMainViewState extends State<ShopMainView> {
     );
   }
 
-  // 3. वर्क डायरी
   Widget _tabWork() {
     return Column(
       children: [
@@ -455,7 +452,6 @@ class _ShopMainViewState extends State<ShopMainView> {
     );
   }
 
-  // 4. नोट गिनती
   Widget _tabNotes() {
     int sum = 0;
     notes.forEach((k, v) => sum += k * v);
@@ -465,4 +461,10 @@ class _ShopMainViewState extends State<ShopMainView> {
         Container(
           padding: const EdgeInsets.all(16),
           color: Colors.teal.shade800,
-          child: Text('कुल गल्ला नकदी: ₹$sum', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center)
+          alignment: Alignment.center,
+          child: Text(
+            'कुल गल्ला नकदी: ₹$sum',
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedB
