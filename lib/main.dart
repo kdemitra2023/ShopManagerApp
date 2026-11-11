@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
@@ -16,7 +17,7 @@ class ShopApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Shop Manager',
+      title: 'Sidharth Shop Manager',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: Colors.indigo,
@@ -40,6 +41,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String shopName = 'Sidharth E-Mitra & Book Store';
   String shopAddress = 'नेताजी मार्केट, लूणकरणसर';
   String shopPhone = '9257161097';
+  String shopUpi = '9257161097@sbi';
 
   @override
   void initState() {
@@ -53,6 +55,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       shopName = prefs.getString('shop_name') ?? 'Sidharth E-Mitra & Book Store';
       shopAddress = prefs.getString('shop_address') ?? 'नेताजी मार्केट, लूणकरणसर';
       shopPhone = prefs.getString('shop_phone') ?? '9257161097';
+      shopUpi = prefs.getString('shop_upi') ?? '9257161097@sbi';
     });
   }
 
@@ -60,11 +63,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final nameCtrl = TextEditingController(text: shopName);
     final addrCtrl = TextEditingController(text: shopAddress);
     final phoneCtrl = TextEditingController(text: shopPhone);
+    final upiCtrl = TextEditingController(text: shopUpi);
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('दुकान प्रोफ़ाइल संपादित करें'),
+        title: const Text('दुकान प्रोफाइल व UPI सेटिंग'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -72,6 +76,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'दुकान का नाम')),
               TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'पता / मार्केट')),
               TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'मोबाइल नंबर'), keyboardType: TextInputType.phone),
+              TextField(controller: upiCtrl, decoration: const InputDecoration(labelText: 'UPI ID (QR के लिए)')),
             ],
           ),
         ),
@@ -83,10 +88,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               await prefs.setString('shop_name', nameCtrl.text);
               await prefs.setString('shop_address', addrCtrl.text);
               await prefs.setString('shop_phone', phoneCtrl.text);
+              await prefs.setString('shop_upi', upiCtrl.text);
               setState(() {
                 shopName = nameCtrl.text;
                 shopAddress = addrCtrl.text;
                 shopPhone = phoneCtrl.text;
+                shopUpi = upiCtrl.text;
               });
               if (mounted) Navigator.pop(ctx);
             },
@@ -97,45 +104,156 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
+  void _showUpiQrDialog(double amount, String note) {
+    final upiUrl = 'upi://pay?pa=$shopUpi&pn=${Uri.encodeComponent(shopName)}&am=$amount&cu=INR&tn=${Uri.encodeComponent(note)}';
+    final qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${Uri.encodeComponent(upiUrl)}';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Center(child: Text(shopName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('भुगतान राशि: ₹$amount', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+            Text('UPI ID: $shopUpi', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+              child: Image.network(
+                qrApiUrl,
+                height: 200,
+                width: 200,
+                loadingBuilder: (c, child, progress) => progress == null ? child : const SizedBox(height: 200, width: 200, child: Center(child: CircularProgressIndicator())),
+                errorBuilder: (c, e, s) => const Text('QR लोड करने में विफल'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text('PhonePe, GPay, Paytm से स्कैन करें', style: TextStyle(fontSize: 11, color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें')),
+        ],
+      ),
+    );
+  }
+
+  void _sendDailyClosingReport() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? cashRaw = prefs.getString('cash_data');
+    final String? khataRaw = prefs.getString('khata_data');
+
+    final List cashList = cashRaw != null ? json.decode(cashRaw) : [];
+    final List khataList = khataRaw != null ? json.decode(khataRaw) : [];
+
+    double cashBal = 0.0, sbiBal = 0.0, pnbBal = 0.0, totalIncome = 0.0, totalExpense = 0.0;
+    for (var t in cashList) {
+      double amt = (t['amount'] ?? 0.0);
+      bool isIn = t['type'].toString().contains('In');
+      if (isIn) {
+        totalIncome += amt;
+      } else {
+        totalExpense += amt;
+      }
+
+      if (t['account'] == 'Cash (गल्ला)') {
+        cashBal += isIn ? amt : -amt;
+      } else if (t['account'] == 'SBI Bank') {
+        sbiBal += isIn ? amt : -amt;
+      } else if (t['account'] == 'PNB Bank') {
+        pnbBal += isIn ? amt : -amt;
+      }
+    }
+
+    double totalUdhar = 0.0;
+    for (var k in khataList) {
+      totalUdhar += (k['amount'] ?? 0.0);
+    }
+
+    final date = DateTime.now().toString().split(' ')[0];
+    final msg = Uri.encodeComponent(
+      '📊 *दैनिक क्लोजिंग रिपोर्ट ($date)*\n'
+      '🏪 *$shopName*\n'
+      '📍 $shopAddress\n'
+      '-----------------------------\n'
+      '💵 गल्ला (नकद): ₹$cashBal\n'
+      '🏦 SBI बैलेंस: ₹$sbiBal\n'
+      '🏦 PNB बैलेंस: ₹$pnbBal\n'
+      '-----------------------------\n'
+      '📈 आज की कुल आवक: ₹$totalIncome\n'
+      '📉 आज का कुल खर्च: ₹$totalExpense\n'
+      '📌 कुल बकाया उधार: ₹$totalUdhar\n'
+      '-----------------------------\n'
+      'रिपोर्ट समय: ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}'
+    );
+
+    final cleanPhone = shopPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    final fullNumber = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+    final url = Uri.parse('https://wa.me/$fullNumber?text=$msg');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
   void _exportExcelBackup() async {
     final prefs = await SharedPreferences.getInstance();
     final String? khataRaw = prefs.getString('khata_data');
     final String? cashRaw = prefs.getString('cash_data');
+    final String? ssoRaw = prefs.getString('sso_data');
+    final String? workRaw = prefs.getString('work_diary_data');
 
     final List khataList = khataRaw != null ? json.decode(khataRaw) : [];
     final List cashList = cashRaw != null ? json.decode(cashRaw) : [];
+    final List ssoList = ssoRaw != null ? json.decode(ssoRaw) : [];
+    final List workList = workRaw != null ? json.decode(workRaw) : [];
 
     StringBuffer csv = StringBuffer();
     csv.writeln('=== $shopName ===');
-    csv.writeln('पता: $shopAddress | फोन: $shopPhone');
     csv.writeln('दिनांक: ${DateTime.now().toString().split(' ')[0]}');
     csv.writeln('');
 
-    csv.writeln('--- ग्राहक खाता / उधार विवरण ---');
-    csv.writeln('क्र.सं.,ग्राहक का नाम,मोबाइल नंबर,काम,बकाया राशि (रु)');
+    csv.writeln('--- 1. ग्राहक उधार सूची ---');
+    csv.writeln('क्र.सं.,नाम,मोबाइल,काम,राशि (रु)');
     for (int i = 0; i < khataList.length; i++) {
       final c = khataList[i];
       csv.writeln('${i + 1},"${c['name']}","${c['phone']}","${c['work']}",${c['amount']}');
     }
     csv.writeln('');
 
-    csv.writeln('--- दैनिक कैश & बैंक रजिस्टर ---');
-    csv.writeln('क्र.सं.,श्रेणी,विवरण,प्रकार,खाता,राशि (रु)');
+    csv.writeln('--- 2. कैश & बैंक रजिस्टर ---');
+    csv.writeln('क्र.सं.,श्रेणी,खाता,प्रकार,राशि (रु),विवरण');
     for (int i = 0; i < cashList.length; i++) {
       final t = cashList[i];
-      csv.writeln('${i + 1},"${t['category']}","${t['desc']}","${t['type']}","${t['account']}",${t['amount']}');
+      csv.writeln('${i + 1},"${t['category']}","${t['account']}","${t['type']}",${t['amount']},"${t['desc']}"');
+    }
+    csv.writeln('');
+
+    csv.writeln('--- 3. ग्राहक SSO व दस्तावेज डायरेक्टरी ---');
+    csv.writeln('क्र.सं.,नाम,मोबाइल,SSO ID,जन आधार,आधार');
+    for (int i = 0; i < ssoList.length; i++) {
+      final s = ssoList[i];
+      csv.writeln('${i + 1},"${s['name']}","${s['phone']}","${s['sso']}","${s['jan']}","${s['aadhaar']}"');
+    }
+    csv.writeln('');
+
+    csv.writeln('--- 4. आवेदन व फॉर्म वर्क डायरी ---');
+    csv.writeln('क्र.सं.,ग्राहक,मोबाइल,कार्य,टोकन/आईडी,स्थिति');
+    for (int i = 0; i < workList.length; i++) {
+      final w = workList[i];
+      csv.writeln('${i + 1},"${w['name']}","${w['phone']}","${w['work']}","${w['token']}","${w['status']}"');
     }
 
     try {
       final directory = await getTemporaryDirectory();
-      final path = '${directory.path}/Shop_Full_Backup_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final path = '${directory.path}/Shop_Master_Backup_${DateTime.now().millisecondsSinceEpoch}.csv';
       final file = File(path);
       await file.writeAsString(csv.toString());
-
-      await Share.shareXFiles([XFile(path)], text: '$shopName - संपूर्ण बहीखाता बैकअप (Excel File)');
+      await Share.shareXFiles([XFile(path)], text: '$shopName - संपूर्ण बहीखाता व बैकअप');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('बैकअप एरर: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('बैकअप त्रुटि: $e')));
       }
     }
   }
@@ -143,36 +261,56 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> screens = [
-      KhataScreen(shopName: shopName, shopPhone: shopPhone),
+      KhataScreen(
+        shopName: shopName,
+        shopPhone: shopPhone,
+        shopAddress: shopAddress,
+        onShowQr: (amt) => _showUpiQrDialog(amt, 'उधार चुकता'),
+      ),
       const BankSplitCashRegister(),
-      const JobAlertsScreen(),
+      WorkDiaryScreen(shopName: shopName, shopPhone: shopPhone),
+      DenominationCounterScreen(),
+      const CustomerVaultScreen(),
+      ShopToolsAndRatesScreen(
+        shopName: shopName,
+        shopPhone: shopPhone,
+        onGenerateCustomQr: (amt) => _showUpiQrDialog(amt, 'ई-मित्र सेवा शुल्क'),
+      ),
+      const ExamCalendarScreen(),
     ];
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
-        title: Row(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.storefront, color: Colors.indigo),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(shopName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                  Text('$shopAddress | 📞 $shopPhone', style: const TextStyle(fontSize: 11, color: Colors.white70), overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
+            Text(shopName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+            Text('$shopAddress | 📞 $shopPhone', style: const TextStyle(fontSize: 11, color: Colors.white70), overflow: TextOverflow.ellipsis),
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.file_download), tooltip: 'Excel बैकअप', onPressed: _exportExcelBackup),
-          IconButton(icon: const Icon(Icons.edit_note), tooltip: 'प्रोफ़ाइल बदलें', onPressed: _editShopProfileDialog),
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            tooltip: 'दुकान UPI QR कोड',
+            onPressed: () => _showUpiQrDialog(0.0, 'दुकान भुगतान'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.send_to_mobile),
+            tooltip: 'WhatsApp क्लोजिंग रिपोर्ट',
+            onPressed: _sendDailyClosingReport,
+          ),
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            tooltip: 'Excel बैकअप',
+            onPressed: _exportExcelBackup,
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_note),
+            tooltip: 'प्रोफ़ाइल बदलें',
+            onPressed: _editShopProfileDialog,
+          ),
         ],
       ),
       body: screens[_currentIndex],
@@ -180,20 +318,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         selectedIndex: _currentIndex,
         onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.menu_book), label: 'खाता / उधार'),
-          NavigationDestination(icon: Icon(Icons.account_balance), label: 'कैश & बैंक'),
-          NavigationDestination(icon: Icon(Icons.notifications_active), label: 'जॉब अलर्ट'),
+          NavigationDestination(icon: Icon(Icons.menu_book), label: 'उधार खाता'),
+          NavigationDestination(icon: Icon(Icons.account_balance), label: 'कैश/बैंक'),
+          NavigationDestination(icon: Icon(Icons.assignment), label: 'वर्क डायरी'),
+          NavigationDestination(icon: Icon(Icons.payments), label: 'नोट गिनती'),
+          NavigationDestination(icon: Icon(Icons.folder_shared), label: 'SSO वॉल्ट'),
+          NavigationDestination(icon: Icon(Icons.receipt_long), label: 'रेट & टूल'),
+          NavigationDestination(icon: Icon(Icons.calendar_month), label: 'एग्जाम 2026'),
         ],
       ),
     );
   }
 }
 
-// ---------------- 1. खाता स्क्रीन & व्हाट्सएप रसीद ----------------
+// ---------------- 1. खाता स्क्रीन & UPI QR ----------------
 class KhataScreen extends StatefulWidget {
   final String shopName;
   final String shopPhone;
-  const KhataScreen({super.key, required this.shopName, required this.shopPhone});
+  final String shopAddress;
+  final Function(double) onShowQr;
+  const KhataScreen({super.key, required this.shopName, required this.shopPhone, required this.shopAddress, required this.onShowQr});
 
   @override
   State<KhataScreen> createState() => _KhataScreenState();
@@ -212,9 +356,7 @@ class _KhataScreenState extends State<KhataScreen> {
     final prefs = await SharedPreferences.getInstance();
     final String? data = prefs.getString('khata_data');
     if (data != null) {
-      setState(() {
-        customers = json.decode(data);
-      });
+      setState(() => customers = json.decode(data));
     }
   }
 
@@ -232,15 +374,15 @@ class _KhataScreenState extends State<KhataScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('नया उधार जोड़ें'),
+        title: const Text('नया उधार खाता जोड़ें'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'ग्राहक का नाम')),
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'ग्राहक का नाम *')),
               TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'मोबाइल नंबर'), keyboardType: TextInputType.phone),
-              TextField(controller: workCtrl, decoration: const InputDecoration(labelText: 'काम (फॉर्म / फोटोकॉपी / टोकन)')),
-              TextField(controller: amountCtrl, decoration: const InputDecoration(labelText: 'उधार राशि (₹)'), keyboardType: TextInputType.number),
+              TextField(controller: workCtrl, decoration: const InputDecoration(labelText: 'काम का विवरण')),
+              TextField(controller: amountCtrl, decoration: const InputDecoration(labelText: 'उधार राशि (₹) *'), keyboardType: TextInputType.number),
             ],
           ),
         ),
@@ -279,7 +421,7 @@ class _KhataScreenState extends State<KhataScreen> {
       'प्रिय $name जी,\n'
       'आपके द्वारा कराए गए कार्य ($work) का ₹$amount बकाया है।\n'
       'कृपया समय पर भुगतान करें।\n'
-      '📞 संपर्क: ${widget.shopPhone}'
+      'संपर्क: ${widget.shopPhone}'
     );
     final url = Uri.parse('https://wa.me/$fullNumber?text=$msg');
     if (await canLaunchUrl(url)) {
@@ -287,15 +429,21 @@ class _KhataScreenState extends State<KhataScreen> {
     }
   }
 
-  void _settlePaymentDialog(int index) {
+  void _settlePayment(int index) {
     final item = customers[index];
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('उधार चुकता / पेमेंट रसीद'),
-        content: Text('${item['name']} जी का ₹${item['amount']} का भुगतान प्राप्त हुआ? क्या आप डिजिटल रसीद भेजना चाहते हैं?'),
+        content: Text('${item['name']} जी का ₹${item['amount']} का भुगतान प्राप्त हुआ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              widget.onShowQr((item['amount'] as num).toDouble());
+            },
+            child: const Text('UPI QR दिखाएं'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
@@ -303,11 +451,10 @@ class _KhataScreenState extends State<KhataScreen> {
               final phone = (item['phone'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
               final fullNumber = phone.length == 10 ? '91$phone' : phone;
               final receiptMsg = Uri.encodeComponent(
-                '🧾 *भुगतान रसीद (Payment Receipt)*\n'
+                '🧾 *भुगतान पावती (Payment Receipt)*\n'
                 '----------------------------\n'
                 '🏪 *${widget.shopName}*\n'
-                '📍 ${widget.shopAddress}\n'
-                '📞 ${widget.shopPhone}\n'
+                '📍 ${widget.shopAddress} | 📞 ${widget.shopPhone}\n'
                 '----------------------------\n'
                 '👤 ग्राहक: ${item['name']}\n'
                 '📝 विवरण: ${item['work']}\n'
@@ -315,12 +462,10 @@ class _KhataScreenState extends State<KhataScreen> {
                 '📅 दिनांक: ${DateTime.now().toString().split(' ')[0]}\n'
                 '✅ स्थिति: पूर्ण भुगतान (PAID)\n'
                 '----------------------------\n'
-                'धन्यवाद! आपका दिन शुभ हो।'
+                'धन्यवाद!'
               );
-
               setState(() => customers.removeAt(index));
               _saveData();
-
               if (fullNumber.isNotEmpty) {
                 final url = Uri.parse('https://wa.me/$fullNumber?text=$receiptMsg');
                 if (await canLaunchUrl(url)) {
@@ -328,7 +473,7 @@ class _KhataScreenState extends State<KhataScreen> {
                 }
               }
             },
-            child: const Text('भुगतान लें & रसीद भेजें'),
+            child: const Text('प्राप्त & रसीद भेजें'),
           ),
         ],
       ),
@@ -370,176 +515,4 @@ class _KhataScreenState extends State<KhataScreen> {
                         subtitle: Text('${item['work'] ?? ''}\n📞 ${item['phone'] ?? ''}'),
                         isThreeLine: true,
                         trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('₹${item['amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
-                            IconButton(
-                              icon: const Icon(Icons.message, color: Colors.green),
-                              tooltip: 'व्हाट्सएप तकाजा',
-                              onPressed: () => _sendReminder(item['phone'] ?? '', item['name'] ?? '', item['amount'], item['work'] ?? ''),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.check_circle, color: Colors.blue),
-                              tooltip: 'चुकता करें & रसीद दें',
-                              onPressed: () => _settlePaymentDialog(i),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Align(
-            alignment: Alignment.bottomRight,
-            child: FloatingActionButton(
-              onPressed: _addCustomerDialog,
-              backgroundColor: Colors.indigo,
-              child: const Icon(Icons.add, color: Colors.white),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ---------------- 2. बैंक स्प्लिट & अकाउंटिंग श्रेणियां ----------------
-class BankSplitCashRegister extends StatefulWidget {
-  const BankSplitCashRegister({super.key});
-
-  @override
-  State<BankSplitCashRegister> createState() => _BankSplitCashRegisterState();
-}
-
-class _BankSplitCashRegisterState extends State<BankSplitCashRegister> {
-  List transactions = [];
-
-  final List<String> categories = [
-    'ई-मित्र टोकन फीस',
-    'फोटोकॉपी & प्रिंटिंग',
-    'स्टेशनरी & बुक्स बिक्री',
-    'ऑनलाइन फॉर्म फीस',
-    'रिचार्ज & बिल भुगतान',
-    'दुकान दैनिक खर्च',
-  ];
-
-  final List<String> accountTypes = [
-    'Cash (गल्ला)',
-    'SBI Bank',
-    'PNB Bank',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTxns();
-  }
-
-  void _loadTxns() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? data = prefs.getString('cash_data');
-    if (data != null) {
-      setState(() {
-        transactions = json.decode(data);
-      });
-    }
-  }
-
-  void _saveTxns() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('cash_data', json.encode(transactions));
-  }
-
-  void _addTxnDialog() {
-    final descCtrl = TextEditingController();
-    final amtCtrl = TextEditingController();
-    String selectedCategory = categories[0];
-    String selectedAccount = accountTypes[0];
-    String type = 'In (आवक)';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('लेन-देन जोड़ें'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DropdownButton<String>(
-                  value: type,
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: 'In (आवक)', child: Text('आवक / कमाई (+)')),
-                    DropdownMenuItem(value: 'Out (खर्च)', child: Text('खर्च / निकासी (-)')),
-                  ],
-                  onChanged: (val) => setDialogState(() => type = val!),
-                ),
-                const SizedBox(height: 8),
-                const Text('अकाउंटिंग श्रेणी:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                DropdownButton<String>(
-                  value: selectedCategory,
-                  isExpanded: true,
-                  items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                  onChanged: (val) => setDialogState(() => selectedCategory = val!),
-                ),
-                const SizedBox(height: 8),
-                const Text('खाता / माध्यम:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                DropdownButton<String>(
-                  value: selectedAccount,
-                  isExpanded: true,
-                  items: accountTypes.map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
-                  onChanged: (val) => setDialogState(() => selectedAccount = val!),
-                ),
-                TextField(controller: amtCtrl, decoration: const InputDecoration(labelText: 'राशि (₹)'), keyboardType: TextInputType.number),
-                TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'विवरण / टिप्पणी')),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
-            ElevatedButton(
-              onPressed: () {
-                if (amtCtrl.text.isNotEmpty) {
-                  setState(() {
-                    transactions.insert(0, {
-                      'category': selectedCategory,
-                      'account': selectedAccount,
-                      'type': type,
-                      'amount': double.tryParse(amtCtrl.text) ?? 0.0,
-                      'desc': descCtrl.text,
-                      'time': '${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
-                    });
-                  });
-                  _saveTxns();
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('सेव करें'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  double _getAccountBalance(String acc) {
-    double bal = 0.0;
-    for (var t in transactions) {
-      if (t['account'] == acc) {
-        if (t['type'].toString().contains('In')) {
-          bal += (t['amount'] ?? 0.0);
-        } else {
-          bal -= (t['amount'] ?? 0.0);
-        }
-      }
-    }
-    return bal;
-  }
-
-  @override
-  Widget build(Build
+                          mainAx
