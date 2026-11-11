@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class CashScreen extends StatefulWidget {
   const CashScreen({super.key});
@@ -14,7 +17,7 @@ class _CashScreenState extends State<CashScreen> {
   double openCash = 0.0;
   double openSbi = 0.0;
   double openPnb = 0.0;
-  int viewMode = 0; // 0 = आज (Daily), 1 = इस महीने (Monthly), 2 = सभी (All)
+  int viewMode = 0; // 0 = आज, 1 = इस माह, 2 = पूरा रजिस्टर
 
   @override
   void initState() {
@@ -37,7 +40,6 @@ class _CashScreenState extends State<CashScreen> {
     await p.setString('c_d', json.encode(cash));
   }
 
-  // ओपनिंग बैलेंस बदलने का डायलॉग
   void _editOpeningBalance() {
     final cCtrl = TextEditingController(text: openCash.toStringAsFixed(0));
     final sCtrl = TextEditingController(text: openSbi.toStringAsFixed(0));
@@ -94,6 +96,82 @@ class _CashScreenState extends State<CashScreen> {
     return base + diff;
   }
 
+  // PDF जेनरेट व शेयर करने का फंक्शन
+  void _exportAndSharePdf(List list, String title, double pIn, double pOut) async {
+    final doc = pw.Document();
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Sidharth E-Mitra & Book Store', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Netaji Market, Lunkaransar | Mob: 9257161097', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(title, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                      pw.Text('Date: ${DateTime.now().toString().split(' ')[0]}', style: const pw.TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(color: PdfColors.grey200, borderRadius: pw.BorderRadius.circular(6)),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  pw.Text('Total In: Rs. $pIn', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+                  pw.Text('Total Out: Rs. $pOut', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.red800)),
+                  pw.Text('Net: Rs. ${pIn - pOut}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 15),
+            pw.TableHelper.fromTextArray(
+              headers: ['Date', 'Category / Item', 'Account', 'Type', 'Amount (Rs.)'],
+              data: list.map((item) {
+                return [
+                  item['d'] ?? '',
+                  '${item['m']} (${item['desc'] ?? ''})',
+                  item['ac'] ?? '',
+                  item['t'] == 'In' ? 'IN (+)' : 'OUT (-)',
+                  'Rs. ${item['a']}',
+                ];
+              }).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo700),
+              cellHeight: 25,
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.center,
+                3: pw.Alignment.center,
+                4: pw.Alignment.centerRight,
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.sharePdf(bytes: await doc.save(), filename: 'CashRegister_${title.replaceAll(' ', '_')}.pdf');
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -101,12 +179,16 @@ class _CashScreenState extends State<CashScreen> {
     final monthStr = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
     List filteredList = [];
+    String sheetTitle = "Daily Report";
     if (viewMode == 0) {
       filteredList = cash.where((x) => (x['d'] ?? '').toString().startsWith(todayStr)).toList();
+      sheetTitle = "Daily Report ($todayStr)";
     } else if (viewMode == 1) {
       filteredList = cash.where((x) => (x['d'] ?? '').toString().startsWith(monthStr)).toList();
+      sheetTitle = "Monthly Report ($monthStr)";
     } else {
       filteredList = cash;
+      sheetTitle = "Complete Cash Register";
     }
 
     double periodIn = 0.0, periodOut = 0.0;
@@ -121,7 +203,6 @@ class _CashScreenState extends State<CashScreen> {
 
     return Column(
       children: [
-        // ऊपर बैलेंस समरी कार्ड + ओपनिंग बैलेंस एडिट बटन
         Container(
           margin: const EdgeInsets.all(10),
           padding: const EdgeInsets.all(12),
@@ -157,22 +238,31 @@ class _CashScreenState extends State<CashScreen> {
             ],
           ),
         ),
-
-        // दैनिक (Daily), मासिक (Monthly), और ऑल फ़िल्टर स्विच
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(value: 0, label: Text('आज (Daily)')),
-              ButtonSegment(value: 1, label: Text('इस माह (Monthly)')),
-              ButtonSegment(value: 2, label: Text('पूरा रजिस्टर')),
+          child: Row(
+            children: [
+              Expanded(
+                child: SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 0, label: Text('आज')),
+                    ButtonSegment(value: 1, label: Text('इस माह')),
+                    ButtonSegment(value: 2, label: Text('पूरा')),
+                  ],
+                  selected: {viewMode},
+                  onSelectionChanged: (set) => setState(() => viewMode = set.first),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                icon: const Icon(Icons.picture_as_pdf, size: 18),
+                label: const Text('PDF शेयर', style: TextStyle(fontSize: 12)),
+                onPressed: () => _exportAndSharePdf(filteredList, sheetTitle, periodIn, periodOut),
+              ),
             ],
-            selected: {viewMode},
-            onSelectionChanged: (set) => setState(() => viewMode = set.first),
           ),
         ),
-
-        // चुने हुए समय की आवक/खर्च पट्टी
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -186,8 +276,6 @@ class _CashScreenState extends State<CashScreen> {
             ],
           ),
         ),
-
-        // लेन-देन की लिस्ट
         Expanded(
           child: filteredList.isEmpty
               ? const Center(child: Text('इस अवधि में कोई लेन-देन नहीं है।', style: TextStyle(color: Colors.grey)))
@@ -230,8 +318,6 @@ class _CashScreenState extends State<CashScreen> {
                   },
                 ),
         ),
-
-        // नई एंट्री जोड़ने का फ्लोटिंग बटन
         Padding(
           padding: const EdgeInsets.all(12),
           child: Align(
@@ -272,5 +358,66 @@ class _CashScreenState extends State<CashScreen> {
                                 DropdownMenuItem(value: 'SBI', child: Text('SBI बैंक खाता')),
                                 DropdownMenuItem(value: 'PNB', child: Text('PNB बैंक खाता')),
                               ],
-                              onChanged: (v) => set
-                              
+                              onChanged: (v) => setD(() => ac = v!),
+                            ),
+                            DropdownButton<String>(
+                              value: cat,
+                              isExpanded: true,
+                              items: const [
+                                DropdownMenuItem(value: 'ई-मित्र टोकन', child: Text('ई-मित्र टोकन / फॉर्म')),
+                                DropdownMenuItem(value: 'फोटोकॉपी/प्रिंट', child: Text('फोटोकॉपी / प्रिंट')),
+                                DropdownMenuItem(value: 'स्टेशनरी/बुक्स', child: Text('स्टेशनरी / बुक्स')),
+                                DropdownMenuItem(value: 'AEPS/मनी ट्रांसफर', child: Text('AEPS / ट्रांसफर')),
+                                DropdownMenuItem(value: 'दुकान खर्च', child: Text('दुकान खर्च (चाय/सामान)')),
+                                DropdownMenuItem(value: 'अन्य', child: Text('अन्य')),
+                              ],
+                              onChanged: (v) => setD(() => cat = v!),
+                            ),
+                            TextField(controller: amtCtrl, decoration: const InputDecoration(labelText: 'रकम (₹) *'), keyboardType: TextInputType.number),
+                            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'विवरण / ग्राहक नाम')),
+                          ],
+                        ),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (amtCtrl.text.isNotEmpty) {
+                              setState(() {
+                                cash.insert(0, {
+                                  'm': cat,
+                                  'ac': ac,
+                                  't': t,
+                                  'a': double.tryParse(amtCtrl.text) ?? 0.0,
+                                  'desc': descCtrl.text,
+                                  'd': "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}",
+                                });
+                              });
+                              _saveCash();
+                              Navigator.pop(ctx);
+                            }
+                          },
+                          child: const Text('जोड़ें'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _balBox(String title, double amt, Color col) {
+    return Column(
+      children: [
+        Text(title, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+        const SizedBox(height: 2),
+        Text('₹$amt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: col)),
+      ],
+    );
+  }
+}
