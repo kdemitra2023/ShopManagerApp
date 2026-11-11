@@ -100,13 +100,19 @@ class _ShopMainViewState extends State<ShopMainView> {
     for (var t in cash) {
       double a = (t['amount'] as num?)?.toDouble() ?? 0.0;
       bool isIn = t['t'].toString().contains('In');
-      isIn ? inc += a : exp += a;
+      if (isIn) {
+        inc += a;
+      } else {
+        exp += a;
+      }
       if (t['acc'] == 'Cash') cBal += isIn ? a : -a;
       if (t['acc'] == 'SBI') sbiBal += isIn ? a : -a;
       if (t['acc'] == 'PNB') pnbBal += isIn ? a : -a;
     }
     double due = 0;
-    for (var k in khata) due += (k['amount'] as num?)?.toDouble() ?? 0.0;
+    for (var k in khata) {
+      due += (k['amount'] as num?)?.toDouble() ?? 0.0;
+    }
     final r = '📊 *दुकान क्लोजिंग समरी*\n🏪 *$shopName*\n📍 $shopAddress\n--------------------\n💵 गल्ला कैश: ₹$cBal\n🏦 SBI: ₹$sbiBal\n🏦 PNB: ₹$pnbBal\n--------------------\n📈 आवक: ₹$inc | 📉 खर्च: ₹$exp\n📌 कुल उधार बकाया: ₹$due';
     _sendWa(shopPhone, r);
   }
@@ -114,11 +120,15 @@ class _ShopMainViewState extends State<ShopMainView> {
   void _copyBackup() {
     StringBuffer b = StringBuffer();
     b.writeln('=== $shopName Backup ===\n-- UDHAT KHATA --\nनाम,फोन,काम,रकम');
-    for (var k in khata) b.writeln('${k['name']},${k['phone']},${k['work']},${k['amount']}');
+    for (var k in khata) {
+      b.writeln('${k['name']},${k['phone']},${k['work']},${k['amount']}');
+    }
     b.writeln('\n-- CASH BOOK --\nमद,खाता,प्रकार,रकम');
-    for (var c in cash) b.writeln('${c['cat']},${c['acc']},${c['t']},${c['amount']}');
+    for (var c in cash) {
+      b.writeln('${c['cat']},${c['acc']},${c['t']},${c['amount']}');
+    }
     Clipboard.setData(ClipboardData(text: b.toString()));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('पूरा बैकअप कॉपी हो गया! Excel में पेस्ट कर सकते हैं।')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('पूरा बैकअप कॉपी हो गया!')));
   }
 
   void _editProfile() {
@@ -200,29 +210,21 @@ class _ShopMainViewState extends State<ShopMainView> {
   }
 
   Widget _buildPage() {
-    switch (_idx) {
-      case 0:
-        return _tabKhata();
-      case 1:
-        return _tabCash();
-      case 2:
-        return _tabWork();
-      case 3:
-        return _tabNotes();
-      case 4:
-        return _tabSso();
-      case 5:
-        return _tabRates();
-      case 6:
-      default:
-        return _tabExams();
-    }
+    if (_idx == 0) return _tabKhata();
+    if (_idx == 1) return _tabCash();
+    if (_idx == 2) return _tabWork();
+    if (_idx == 3) return _tabNotes();
+    if (_idx == 4) return _tabSso();
+    if (_idx == 5) return _tabRates();
+    return _tabExams();
   }
 
   // 1. खाता स्क्रीन
   Widget _tabKhata() {
     double totalDue = 0;
-    for (var k in khata) totalDue += (k['amount'] as num?)?.toDouble() ?? 0.0;
+    for (var k in khata) {
+      totalDue += (k['amount'] as num?)?.toDouble() ?? 0.0;
+    }
     return Column(
       children: [
         Container(
@@ -253,7 +255,7 @@ class _ShopMainViewState extends State<ShopMainView> {
                           children: [
                             Text('₹${item['amount']}', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
                             IconButton(icon: const Icon(Icons.qr_code, color: Colors.purple), onPressed: () => _showQr((item['amount'] as num).toDouble())),
-                            IconButton(icon: const Icon(Icons.whatsapp, color: Colors.green), onPressed: () => _sendWa(item['phone'] ?? '', 'नमस्ते ${item['name']} जी, $shopName का ₹${item['amount']} बकाया है। कृपया भुगतान करें।')),
+                            IconButton(icon: const Icon(Icons.chat, color: Colors.green), onPressed: () => _sendWa(item['phone'] ?? '', 'नमस्ते ${item['name']} जी, $shopName का ₹${item['amount']} बकाया है। कृपया भुगतान करें।')),
                             IconButton(
                               icon: const Icon(Icons.check_circle, color: Colors.blue),
                               onPressed: () {
@@ -308,7 +310,11 @@ class _ShopMainViewState extends State<ShopMainView> {
   Widget _tabCash() {
     double getBal(String acc) {
       double b = 0;
-      for (var t in cash) if (t['acc'] == acc) b += (t['t'] == 'In' ? (t['amount'] as num).toDouble() : -(t['amount'] as num).toDouble());
+      for (var t in cash) {
+        if (t['acc'] == acc) {
+          b += (t['t'] == 'In' ? (t['amount'] as num).toDouble() : -(t['amount'] as num).toDouble());
+        }
+      }
       return b;
     }
 
@@ -400,7 +406,7 @@ class _ShopMainViewState extends State<ShopMainView> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(icon: const Icon(Icons.whatsapp, color: Colors.green), onPressed: () => _sendWa(item['phone'] ?? '', 'नमस्ते ${item['name']} जी, आपका कार्य (${item['work']}) टोकन: ${item['token']} तैयार है। दुकान $shopName से प्राप्त कर लें।')),
+                          IconButton(icon: const Icon(Icons.chat, color: Colors.green), onPressed: () => _sendWa(item['phone'] ?? '', 'नमस्ते ${item['name']} जी, आपका कार्य (${item['work']}) टोकन: ${item['token']} तैयार है। दुकान $shopName से प्राप्त कर लें।')),
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.grey),
                             onPressed: () {
@@ -459,6 +465,4 @@ class _ShopMainViewState extends State<ShopMainView> {
         Container(
           padding: const EdgeInsets.all(16),
           color: Colors.teal.shade800,
-          child: Text('कुल गल्ला नकदी: ₹$sum', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-        ),
-        cons
+          child: Text('कुल गल्ला नकदी: ₹$sum', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center)
