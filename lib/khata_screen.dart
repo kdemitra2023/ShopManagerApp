@@ -21,6 +21,7 @@ class KhataScreen extends StatefulWidget {
 
 class _KhataScreenState extends State<KhataScreen> {
   List khata = [];
+  bool showHistory = false;
 
   @override
   void initState() {
@@ -51,83 +52,190 @@ class _KhataScreenState extends State<KhataScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // केवल वही जिनका भुगतान अभी बाकी है (status != 'PAID')
+    final pendingList = khata.where((k) => (k['st'] ?? 'PENDING') == 'PENDING').toList();
+    // जिनका भुगतान हो चुका है
+    final paidList = khata.where((k) => (k['st'] ?? 'PENDING') == 'PAID').toList();
+
     double due = 0;
-    for (var k in khata) due += (k['a'] as num?)?.toDouble() ?? 0;
+    for (var k in pendingList) {
+      due += (k['a'] as num?)?.toDouble() ?? 0;
+    }
+
+    final activeList = showHistory ? paidList : pendingList;
 
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
-          color: Colors.indigo.shade50,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))],
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('कुल बकाया उधार:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('₹$due', style: const TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.bold)),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(showHistory ? 'कुल चुकता रिकॉर्ड:' : 'कुल बकाया उधार:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54)),
+                  const SizedBox(height: 2),
+                  Text(
+                    showHistory ? '${paidList.length} ग्राहक' : '₹$due',
+                    style: TextStyle(fontSize: 20, color: showHistory ? Colors.green.shade700 : Colors.red.shade700, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: showHistory ? Colors.indigo : Colors.green.shade800,
+                  side: BorderSide(color: showHistory ? Colors.indigo : Colors.green.shade400),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: Icon(showHistory ? Icons.arrow_back : Icons.history, size: 18),
+                label: Text(showHistory ? 'बकाया देखें' : 'चुकता हिस्ट्री (${paidList.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                onPressed: () => setState(() => showHistory = !showHistory),
+              ),
             ],
           ),
         ),
         Expanded(
-          child: khata.isEmpty
-              ? const Center(child: Text('कोई उधार नहीं है।'))
+          child: activeList.isEmpty
+              ? Center(
+                  child: Text(
+                    showHistory ? 'कोई चुकता रिकॉर्ड मौजूद नहीं है।' : 'कोई उधार बकाया नहीं है। नीचे + से नया जोड़ें।',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                )
               : ListView.builder(
-                  itemCount: khata.length,
+                  itemCount: activeList.length,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   itemBuilder: (c, i) {
-                    final it = khata[i];
-                    return ListTile(
-                      leading: const CircleAvatar(child: Icon(Icons.person)),
-                      title: Text('${it['n']} (₹${it['a']})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${it['w']} | ${it['p']}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(icon: const Icon(Icons.qr_code, color: Colors.purple), onPressed: () => widget.onShowQr((it['a'] as num).toDouble())),
-                          IconButton(icon: const Icon(Icons.chat, color: Colors.green), onPressed: () => _sendWa(it['p'], 'नमस्ते ${it['n']} जी, ${widget.shopName} का ₹${it['a']} बकाया है।')),
-                          IconButton(
-                            icon: const Icon(Icons.check_circle, color: Colors.blue),
-                            onPressed: () {
-                              _sendWa(it['p'], '🧾 *भुगतान रसीद*\nदुकान: ${widget.shopName}\nग्राहक: ${it['n']}\nरकम: ₹${it['a']} (PAID)\nधन्यवाद!');
-                              setState(() => khata.removeAt(i));
-                              _save();
-                            },
-                          ),
-                        ],
+                    final it = activeList[i];
+                    final originalIndex = khata.indexOf(it);
+                    final bool isPaid = (it['st'] ?? 'PENDING') == 'PAID';
+
+                    return Card(
+                      elevation: 1.5,
+                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: isPaid ? Colors.green.shade100 : Colors.indigo.shade50,
+                          child: Icon(isPaid ? Icons.check : Icons.person, color: isPaid ? Colors.green.shade800 : Colors.indigo),
+                        ),
+                        title: Text('${it['n']} (₹${it['a']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('${it['w']} | 📞 ${it['p']}\nदिनांक: ${it['d'] ?? ''} ${isPaid ? '• [PAID]' : ''}', style: const TextStyle(fontSize: 11)),
+                        isThreeLine: true,
+                        trailing: isPaid
+                            ? IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                                tooltip: 'हिस्ट्री से हटाएं',
+                                onPressed: () {
+                                  setState(() => khata.removeAt(originalIndex));
+                                  _save();
+                                },
+                              )
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.qr_code, color: Colors.purple, size: 22),
+                                    tooltip: 'QR दिखाएं',
+                                    onPressed: () => widget.onShowQr((it['a'] as num).toDouble()),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.chat, color: Colors.green, size: 22),
+                                    tooltip: 'WhatsApp तकाजा',
+                                    onPressed: () => _sendWa(it['p'], 'नमस्ते ${it['n']} जी, ${widget.shopName} का ₹${it['a']} बकाया है। कृपया समय पर भुगतान करें।'),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.check_circle, color: Colors.blue, size: 24),
+                                    tooltip: 'चुकता करें (Clear)',
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('उधार चुकता करें?'),
+                                          content: Text('${it['n']} जी से ₹${it['a']} प्राप्त हो गए हैं? यह रिकॉर्ड हिस्ट्री में सुरक्षित रहेगा।'),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                                              onPressed: () {
+                                                Navigator.pop(ctx);
+                                                _sendWa(it['p'], '🧾 *भुगतान पावती (Payment Receipt)*\n🏪 *${widget.shopName}*\nग्राहक: ${it['n']}\nविवरण: ${it['w']}\nप्राप्त रकम: ₹${it['a']}\nस्थिति: पूर्ण चुकता (PAID)\nदिनांक: ${DateTime.now().toString().split(' ')[0]}\nधन्यवाद!');
+                                                setState(() {
+                                                  khata[originalIndex]['st'] = 'PAID';
+                                                  khata[originalIndex]['paid_date'] = DateTime.now().toString().split(' ')[0];
+                                                });
+                                                _save();
+                                              },
+                                              child: const Text('हाँ, चुकता करें & रसीद भेजें'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
                       ),
                     );
                   },
                 ),
         ),
-        FloatingActionButton(
-          child: const Icon(Icons.add),
-          onPressed: () {
-            final n = TextEditingController(), p = TextEditingController(), w = TextEditingController(), a = TextEditingController();
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('नया उधार'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  TextField(controller: n, decoration: const InputDecoration(labelText: 'नाम *')),
-                  TextField(controller: p, decoration: const InputDecoration(labelText: 'मोबाइल')),
-                  TextField(controller: w, decoration: const InputDecoration(labelText: 'काम')),
-                  TextField(controller: a, decoration: const InputDecoration(labelText: 'रुपये *'), keyboardType: TextInputType.number),
-                ]),
-                actions: [
-                  ElevatedButton(
-                    onPressed: () {
-                      if (n.text.isNotEmpty && a.text.isNotEmpty) {
-                        setState(() => khata.add({'n': n.text, 'p': p.text, 'w': w.text, 'a': double.tryParse(a.text) ?? 0}));
-                        _save();
-                        Navigator.pop(ctx);
-                      }
-                    },
-                    child: const Text('जोड़ें'),
-                  )
-                ],
+        if (!showHistory)
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: FloatingActionButton.extended(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add),
+                label: const Text('नया उधार जोड़ें'),
+                onPressed: () {
+                  final n = TextEditingController(), p = TextEditingController(), w = TextEditingController(), a = TextEditingController();
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('नया उधार दर्ज करें'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(controller: n, decoration: const InputDecoration(labelText: 'ग्राहक का नाम *')),
+                          TextField(controller: p, decoration: const InputDecoration(labelText: 'मोबाइल नंबर'), keyboardType: TextInputType.phone),
+                          TextField(controller: w, decoration: const InputDecoration(labelText: 'काम (फॉर्म / प्रिंट / स्टेशनरी)')),
+                          TextField(controller: a, decoration: const InputDecoration(labelText: 'रुपये (₹) *'), keyboardType: TextInputType.number),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (n.text.isNotEmpty && a.text.isNotEmpty) {
+                              setState(() => khata.insert(0, {
+                                    'n': n.text,
+                                    'p': p.text,
+                                    'w': w.text,
+                                    'a': double.tryParse(a.text) ?? 0,
+                                    'd': DateTime.now().toString().split(' ')[0],
+                                    'st': 'PENDING',
+                                  }));
+                              _save();
+                              Navigator.pop(ctx);
+                            }
+                          },
+                          child: const Text('सेव करें'),
+                        )
+                      ],
+                    ),
+                  );
+                },
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 10),
+            ),
+          ),
       ],
     );
   }
