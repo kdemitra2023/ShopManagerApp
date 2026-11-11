@@ -5,237 +5,158 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 
 void main() {
-  runApp(const ShopApp());
+  runApp(const MaterialApp(
+    title: 'Sidharth Shop Manager',
+    debugShowCheckedModeBanner: false,
+    home: ShopMainView(),
+  ));
 }
 
-class ShopApp extends StatelessWidget {
-  const ShopApp({super.key});
-
+class ShopMainView extends StatefulWidget {
+  const ShopMainView({super.key});
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Sidharth Shop Manager',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: Colors.indigo,
-        useMaterial3: true,
-      ),
-      home: const MainNavigationScreen(),
-    );
-  }
+  State<ShopMainView> createState() => _ShopMainViewState();
 }
 
-class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
-
-  @override
-  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
-}
-
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _currentIndex = 0;
-
+class _ShopMainViewState extends State<ShopMainView> {
+  int _idx = 0;
   String shopName = 'Sidharth E-Mitra & Book Store';
   String shopAddress = 'नेताजी मार्केट, लूणकरणसर';
   String shopPhone = '9257161097';
   String shopUpi = '9257161097@sbi';
 
+  List khata = [];
+  List cash = [];
+  List work = [];
+  List sso = [];
+
+  final Map<int, int> notes = {500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0};
+  final calcCtrl = TextEditingController();
+  double aepsFee = 0.0, aepsTotal = 0.0;
+
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    _loadAll();
   }
 
-  void _loadProfile() async {
-    final prefs = await SharedPreferences.getInstance();
+  void _loadAll() async {
+    final p = await SharedPreferences.getInstance();
     setState(() {
-      shopName = prefs.getString('shop_name') ?? 'Sidharth E-Mitra & Book Store';
-      shopAddress = prefs.getString('shop_address') ?? 'नेताजी मार्केट, लूणकरणसर';
-      shopPhone = prefs.getString('shop_phone') ?? '9257161097';
-      shopUpi = prefs.getString('shop_upi') ?? '9257161097@sbi';
+      shopName = p.getString('sn') ?? shopName;
+      shopAddress = p.getString('sa') ?? shopAddress;
+      shopPhone = p.getString('sp') ?? shopPhone;
+      shopUpi = p.getString('su') ?? shopUpi;
+      khata = json.decode(p.getString('k_data') ?? '[]');
+      cash = json.decode(p.getString('c_data') ?? '[]');
+      work = json.decode(p.getString('w_data') ?? '[]');
+      sso = json.decode(p.getString('s_data') ?? '[]');
     });
   }
 
-  void _editProfileDialog() {
-    final nameCtrl = TextEditingController(text: shopName);
-    final addrCtrl = TextEditingController(text: shopAddress);
-    final phoneCtrl = TextEditingController(text: shopPhone);
-    final upiCtrl = TextEditingController(text: shopUpi);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('दुकान प्रोफाइल व UPI सेटिंग'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'दुकान का नाम')),
-              TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'पता / मार्केट')),
-              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'मोबाइल नंबर'), keyboardType: TextInputType.phone),
-              TextField(controller: upiCtrl, decoration: const InputDecoration(labelText: 'UPI ID')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
-          ElevatedButton(
-            onPressed: () async {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setString('shop_name', nameCtrl.text);
-              await prefs.setString('shop_address', addrCtrl.text);
-              await prefs.setString('shop_phone', phoneCtrl.text);
-              await prefs.setString('shop_upi', upiCtrl.text);
-              setState(() {
-                shopName = nameCtrl.text;
-                shopAddress = addrCtrl.text;
-                shopPhone = phoneCtrl.text;
-                shopUpi = upiCtrl.text;
-              });
-              if (mounted) Navigator.pop(ctx);
-            },
-            child: const Text('सेव करें'),
-          ),
-        ],
-      ),
-    );
+  void _save(String k, dynamic val) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(k, json.encode(val));
   }
 
-  void _showUpiQr(double amount) {
-    final upiUrl = 'upi://pay?pa=$shopUpi&pn=${Uri.encodeComponent(shopName)}&am=$amount&cu=INR';
-    final qrApi = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${Uri.encodeComponent(upiUrl)}';
+  void _openUrl(String link) async {
+    final u = Uri.parse(link);
+    if (await canLaunchUrl(u)) {
+      await launchUrl(u, mode: LaunchMode.externalApplication);
+    }
+  }
 
+  void _sendWa(String phone, String msg) {
+    final clean = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final num = clean.length == 10 ? '91$clean' : clean;
+    if (num.isNotEmpty) {
+      _openUrl('https://wa.me/$num?text=${Uri.encodeComponent(msg)}');
+    }
+  }
+
+  void _showQr(double amt) {
+    final u = 'upi://pay?pa=$shopUpi&pn=${Uri.encodeComponent(shopName)}&am=$amt&cu=INR';
+    final img = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${Uri.encodeComponent(u)}';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Center(child: Text(shopName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+        title: Text(shopName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('भुगतान राशि: ₹$amount', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+            Text('राशि: ₹$amt', style: const TextStyle(fontSize: 18, color: Colors.green, fontWeight: FontWeight.bold)),
             Text('UPI ID: $shopUpi', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-              child: Image.network(
-                qrApi,
-                height: 180,
-                width: 180,
-                loadingBuilder: (c, child, p) => p == null ? child : const SizedBox(height: 180, width: 180, child: Center(child: CircularProgressIndicator())),
-                errorBuilder: (c, e, s) => const Text('QR लोड विफल'),
-              ),
-            ),
+            const SizedBox(height: 10),
+            Image.network(img, height: 180, width: 180, errorBuilder: (c, e, s) => const Text('QR एरर')),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें')),
-        ],
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें'))],
       ),
     );
   }
 
-  void _sendClosingReport() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? cashRaw = prefs.getString('cash_data');
-    final String? khataRaw = prefs.getString('khata_data');
-
-    final List cashList = cashRaw != null ? json.decode(cashRaw) : [];
-    final List khataList = khataRaw != null ? json.decode(khataRaw) : [];
-
-    double cashBal = 0.0, sbiBal = 0.0, pnbBal = 0.0, totalIncome = 0.0, totalExpense = 0.0;
-    for (var t in cashList) {
-      double amt = (t['amount'] as num?)?.toDouble() ?? 0.0;
-      bool isIn = t['type'].toString().contains('In');
-      if (isIn) {
-        totalIncome += amt;
-      } else {
-        totalExpense += amt;
-      }
-
-      if (t['account'] == 'Cash (गल्ला)') {
-        cashBal += isIn ? amt : -amt;
-      } else if (t['account'] == 'SBI Bank') {
-        sbiBal += isIn ? amt : -amt;
-      } else if (t['account'] == 'PNB Bank') {
-        pnbBal += isIn ? amt : -amt;
-      }
+  void _closingReport() {
+    double cBal = 0, sbiBal = 0, pnbBal = 0, inc = 0, exp = 0;
+    for (var t in cash) {
+      double a = (t['amount'] as num?)?.toDouble() ?? 0.0;
+      bool isIn = t['t'].toString().contains('In');
+      isIn ? inc += a : exp += a;
+      if (t['acc'] == 'Cash') cBal += isIn ? a : -a;
+      if (t['acc'] == 'SBI') sbiBal += isIn ? a : -a;
+      if (t['acc'] == 'PNB') pnbBal += isIn ? a : -a;
     }
-
-    double totalUdhar = 0.0;
-    for (var k in khataList) {
-      totalUdhar += (k['amount'] as num?)?.toDouble() ?? 0.0;
-    }
-
-    final date = DateTime.now().toString().split(' ')[0];
-    final msg = Uri.encodeComponent(
-      '📊 *दैनिक क्लोजिंग रिपोर्ट ($date)*\n'
-      '🏪 *$shopName*\n'
-      '📍 $shopAddress\n'
-      '-----------------------------\n'
-      '💵 गल्ला (नकद): ₹$cashBal\n'
-      '🏦 SBI बैलेंस: ₹$sbiBal\n'
-      '🏦 PNB बैलेंस: ₹$pnbBal\n'
-      '-----------------------------\n'
-      '📈 आज की कुल आवक: ₹$totalIncome\n'
-      '📉 आज का कुल खर्च: ₹$totalExpense\n'
-      '📌 कुल बकाया उधार: ₹$totalUdhar\n'
-      '-----------------------------\n'
-      'रिपोर्ट समय: ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}'
-    );
-
-    final cleanPhone = shopPhone.replaceAll(RegExp(r'[^0-9]'), '');
-    final fullNumber = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
-    final url = Uri.parse('https://wa.me/$fullNumber?text=$msg');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
+    double due = 0;
+    for (var k in khata) due += (k['amount'] as num?)?.toDouble() ?? 0.0;
+    final r = '📊 *दुकान क्लोजिंग समरी*\n🏪 *$shopName*\n📍 $shopAddress\n--------------------\n💵 गल्ला कैश: ₹$cBal\n🏦 SBI: ₹$sbiBal\n🏦 PNB: ₹$pnbBal\n--------------------\n📈 आवक: ₹$inc | 📉 खर्च: ₹$exp\n📌 कुल उधार बकाया: ₹$due';
+    _sendWa(shopPhone, r);
   }
 
-  void _exportCsvDialog() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? khataRaw = prefs.getString('khata_data');
-    final String? cashRaw = prefs.getString('cash_data');
+  void _copyBackup() {
+    StringBuffer b = StringBuffer();
+    b.writeln('=== $shopName Backup ===\n-- UDHAT KHATA --\nनाम,फोन,काम,रकम');
+    for (var k in khata) b.writeln('${k['name']},${k['phone']},${k['work']},${k['amount']}');
+    b.writeln('\n-- CASH BOOK --\nमद,खाता,प्रकार,रकम');
+    for (var c in cash) b.writeln('${c['cat']},${c['acc']},${c['t']},${c['amount']}');
+    Clipboard.setData(ClipboardData(text: b.toString()));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('पूरा बैकअप कॉपी हो गया! Excel में पेस्ट कर सकते हैं।')));
+  }
 
-    final List khataList = khataRaw != null ? json.decode(khataRaw) : [];
-    final List cashList = cashRaw != null ? json.decode(cashRaw) : [];
-
-    StringBuffer csv = StringBuffer();
-    csv.writeln('=== $shopName ===');
-    csv.writeln('दिनांक: ${DateTime.now().toString().split(' ')[0]}');
-    csv.writeln('');
-    csv.writeln('--- ग्राहक उधार सूची ---');
-    csv.writeln('क्र.सं.,नाम,मोबाइल,काम,राशि');
-    for (int i = 0; i < khataList.length; i++) {
-      final c = khataList[i];
-      csv.writeln('${i + 1},${c['name']},${c['phone']},${c['work']},${c['amount']}');
-    }
-    csv.writeln('');
-    csv.writeln('--- कैश & बैंक रजिस्टर ---');
-    csv.writeln('क्र.सं.,श्रेणी,खाता,प्रकार,राशि,विवरण');
-    for (int i = 0; i < cashList.length; i++) {
-      final t = cashList[i];
-      csv.writeln('${i + 1},${t['category']},${t['account']},${t['type']},${t['amount']},${t['desc']}');
-    }
-
+  void _editProfile() {
+    final n = TextEditingController(text: shopName);
+    final a = TextEditingController(text: shopAddress);
+    final p = TextEditingController(text: shopPhone);
+    final u = TextEditingController(text: shopUpi);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('बैकअप डेटा (CSV Format)'),
-        content: SingleChildScrollView(
-          child: Text(csv.toString(), style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+        title: const Text('दुकान प्रोफाइल'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: n, decoration: const InputDecoration(labelText: 'दुकान का नाम')),
+            TextField(controller: a, decoration: const InputDecoration(labelText: 'पता/मार्केट')),
+            TextField(controller: p, decoration: const InputDecoration(labelText: 'मोबाइल नंबर')),
+            TextField(controller: u, decoration: const InputDecoration(labelText: 'UPI ID')),
+          ],
         ),
         actions: [
-          ElevatedButton.icon(
-            icon: const Icon(Icons.copy),
-            label: const Text('कॉपी करें'),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: csv.toString()));
+          ElevatedButton(
+            onPressed: () async {
+              final sp = await SharedPreferences.getInstance();
+              await sp.setString('sn', n.text);
+              await sp.setString('sa', a.text);
+              await sp.setString('sp', p.text);
+              await sp.setString('su', u.text);
+              setState(() {
+                shopName = n.text;
+                shopAddress = a.text;
+                shopPhone = p.text;
+                shopUpi = u.text;
+              });
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('बैकअप डेटा कॉपी हो गया!')));
             },
-          ),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें')),
+            child: const Text('सेव करें'),
+          )
         ],
       ),
     );
@@ -243,25 +164,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<Widget> screens = [
-      KhataScreen(
-        shopName: shopName,
-        shopPhone: shopPhone,
-        shopAddress: shopAddress,
-        onShowQr: _showUpiQr,
-      ),
-      const BankSplitCashRegister(),
-      WorkDiaryScreen(shopName: shopName, shopPhone: shopPhone),
-      const DenominationCounterScreen(),
-      const CustomerVaultScreen(),
-      ShopToolsAndRatesScreen(
-        shopName: shopName,
-        shopPhone: shopPhone,
-        onGenerateCustomQr: _showUpiQr,
-      ),
-      const ExamCalendarScreen(),
-    ];
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.indigo,
@@ -269,240 +171,294 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(shopName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-            Text('$shopAddress | 📞 $shopPhone', style: const TextStyle(fontSize: 11, color: Colors.white70), overflow: TextOverflow.ellipsis),
+            Text(shopName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+            Text('$shopAddress | 📞 $shopPhone', style: const TextStyle(fontSize: 10, color: Colors.white70)),
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.qr_code_scanner), tooltip: 'दुकान UPI QR कोड', onPressed: () => _showUpiQr(0.0)),
-          IconButton(icon: const Icon(Icons.send_to_mobile), tooltip: 'WhatsApp क्लोजिंग रिपोर्ट', onPressed: _sendClosingReport),
-          IconButton(icon: const Icon(Icons.file_copy), tooltip: 'Excel/CSV बैकअप', onPressed: _exportCsvDialog),
-          IconButton(icon: const Icon(Icons.edit_note), tooltip: 'प्रोफ़ाइल बदलें', onPressed: _editProfileDialog),
+          IconButton(icon: const Icon(Icons.qr_code), tooltip: 'दुकान QR', onPressed: () => _showQr(0.0)),
+          IconButton(icon: const Icon(Icons.send_to_mobile), tooltip: 'WhatsApp समरी', onPressed: _closingReport),
+          IconButton(icon: const Icon(Icons.copy), tooltip: 'डेटा बैकअप', onPressed: _copyBackup),
+          IconButton(icon: const Icon(Icons.edit), tooltip: 'प्रोफ़ाइल', onPressed: _editProfile),
         ],
       ),
-      body: screens[_currentIndex],
+      body: _buildPage(),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
+        selectedIndex: _idx,
+        onDestinationSelected: (i) => setState(() => _idx = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.menu_book), label: 'उधार खाता'),
+          NavigationDestination(icon: Icon(Icons.menu_book), label: 'खाता'),
           NavigationDestination(icon: Icon(Icons.account_balance), label: 'कैश/बैंक'),
-          NavigationDestination(icon: Icon(Icons.assignment), label: 'वर्क डायरी'),
+          NavigationDestination(icon: Icon(Icons.assignment), label: 'डायरी'),
           NavigationDestination(icon: Icon(Icons.payments), label: 'नोट गिनती'),
-          NavigationDestination(icon: Icon(Icons.folder_shared), label: 'SSO वॉल्ट'),
-          NavigationDestination(icon: Icon(Icons.receipt_long), label: 'रेट & टूल'),
-          NavigationDestination(icon: Icon(Icons.calendar_month), label: 'एग्जाम 2026'),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------- 1. खाता स्क्रीन ----------------
-class KhataScreen extends StatefulWidget {
-  final String shopName;
-  final String shopPhone;
-  final String shopAddress;
-  final Function(double) onShowQr;
-  const KhataScreen({super.key, required this.shopName, required this.shopPhone, required this.shopAddress, required this.onShowQr});
-
-  @override
-  State<KhataScreen> createState() => _KhataScreenState();
-}
-
-class _KhataScreenState extends State<KhataScreen> {
-  List customers = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  void _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? data = prefs.getString('khata_data');
-    if (data != null) {
-      setState(() => customers = json.decode(data));
-    }
-  }
-
-  void _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('khata_data', json.encode(customers));
-  }
-
-  void _addCustomerDialog() {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final amountCtrl = TextEditingController();
-    final workCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('नया उधार खाता जोड़ें'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'ग्राहक का नाम *')),
-              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'मोबाइल नंबर'), keyboardType: TextInputType.phone),
-              TextField(controller: workCtrl, decoration: const InputDecoration(labelText: 'काम का विवरण')),
-              TextField(controller: amountCtrl, decoration: const InputDecoration(labelText: 'उधार राशि (₹) *'), keyboardType: TextInputType.number),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
-          ElevatedButton(
-            onPressed: () {
-              if (nameCtrl.text.isNotEmpty && amountCtrl.text.isNotEmpty) {
-                setState(() {
-                  customers.add({
-                    'name': nameCtrl.text,
-                    'phone': phoneCtrl.text,
-                    'work': workCtrl.text,
-                    'amount': double.tryParse(amountCtrl.text) ?? 0.0,
-                    'date': DateTime.now().toString().split(' ')[0],
-                  });
-                });
-                _saveData();
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('सेव करें'),
-          ),
+          NavigationDestination(icon: Icon(Icons.security), label: 'SSO'),
+          NavigationDestination(icon: Icon(Icons.receipt_long), label: 'रेट/AEPS'),
+          NavigationDestination(icon: Icon(Icons.event), label: 'एग्जाम'),
         ],
       ),
     );
   }
 
-  void _sendReminder(String phone, String name, dynamic amount, String work) async {
-    if (phone.isEmpty) return;
-    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    final fullNumber = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
-    final msg = Uri.encodeComponent(
-      '📌 *उधार रिमाइंडर / सूचना*\n'
-      'दुकान: ${widget.shopName}\n'
-      'प्रिय $name जी,\n'
-      'आपके कार्य ($work) का ₹$amount बकाया है।\n'
-      'कृपया समय पर भुगतान करें।\n'
-      'संपर्क: ${widget.shopPhone}'
-    );
-    final url = Uri.parse('https://wa.me/$fullNumber?text=$msg');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
+  Widget _buildPage() {
+    switch (_idx) {
+      case 0:
+        return _tabKhata();
+      case 1:
+        return _tabCash();
+      case 2:
+        return _tabWork();
+      case 3:
+        return _tabNotes();
+      case 4:
+        return _tabSso();
+      case 5:
+        return _tabRates();
+      case 6:
+      default:
+        return _tabExams();
     }
   }
 
-  void _settlePayment(int index) {
-    final item = customers[index];
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('उधार चुकता / पेमेंट रसीद'),
-        content: Text('${item['name']} जी का ₹${item['amount']} का भुगतान प्राप्त हुआ?'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.onShowQr((item['amount'] as num).toDouble());
-            },
-            child: const Text('UPI QR दिखाएं'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final phone = (item['phone'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
-              final fullNumber = phone.length == 10 ? '91$phone' : phone;
-              final receiptMsg = Uri.encodeComponent(
-                '🧾 *भुगतान पावती (Payment Receipt)*\n'
-                '----------------------------\n'
-                '🏪 *${widget.shopName}*\n'
-                '📍 ${widget.shopAddress} | 📞 ${widget.shopPhone}\n'
-                '----------------------------\n'
-                '👤 ग्राहक: ${item['name']}\n'
-                '📝 विवरण: ${item['work']}\n'
-                '💰 प्राप्त राशि: ₹${item['amount']}\n'
-                '📅 दिनांक: ${DateTime.now().toString().split(' ')[0]}\n'
-                '✅ स्थिति: पूर्ण भुगतान (PAID)\n'
-                '----------------------------\n'
-                'धन्यवाद!'
-              );
-              setState(() => customers.removeAt(index));
-              _saveData();
-              if (fullNumber.isNotEmpty) {
-                final url = Uri.parse('https://wa.me/$fullNumber?text=$receiptMsg');
-                if (await canLaunchUrl(url)) {
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                }
-              }
-            },
-            child: const Text('प्राप्त & रसीद भेजें'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    double totalDues = 0.0;
-    for (var c in customers) {
-      totalDues += (c['amount'] as num?)?.toDouble() ?? 0.0;
-    }
-
+  // 1. खाता स्क्रीन
+  Widget _tabKhata() {
+    double totalDue = 0;
+    for (var k in khata) totalDue += (k['amount'] as num?)?.toDouble() ?? 0.0;
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           color: Colors.indigo.shade50,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('कुल बकाया (उधार खाता):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              Text('₹ $totalDues', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.red)),
+              const Text('कुल बकाया उधार:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('₹$totalDue', style: const TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
         Expanded(
-          child: customers.isEmpty
-              ? const Center(child: Text('कोई उधार बकाया नहीं है। नीचे + दबाकर जोड़ें।'))
+          child: khata.isEmpty
+              ? const Center(child: Text('कोई उधार बकाया नहीं है।'))
               : ListView.builder(
-                  itemCount: customers.length,
+                  itemCount: khata.length,
                   itemBuilder: (ctx, i) {
-                    final item = customers[i];
+                    final item = khata[i];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       child: ListTile(
-                        leading: const CircleAvatar(backgroundColor: Colors.indigo, child: Icon(Icons.person, color: Colors.white)),
+                        leading: const CircleAvatar(child: Icon(Icons.person)),
                         title: Text(item['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('${item['work'] ?? ''}\n📞 ${item['phone'] ?? ''}'),
-                        isThreeLine: true,
+                        subtitle: Text('${item['work']} | ${item['phone']}'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('₹${item['amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
-                            IconButton(
-                              icon: const Icon(Icons.qr_code, color: Colors.purple),
-                              tooltip: 'QR कोड',
-                              onPressed: () => widget.onShowQr((item['amount'] as num).toDouble()),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.message, color: Colors.green),
-                              tooltip: 'व्हाट्सएप तकाजा',
-                              onPressed: () => _sendReminder(item['phone'] ?? '', item['name'] ?? '', item['amount'], item['work'] ?? ''),
-                            ),
+                            Text('₹${item['amount']}', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+                            IconButton(icon: const Icon(Icons.qr_code, color: Colors.purple), onPressed: () => _showQr((item['amount'] as num).toDouble())),
+                            IconButton(icon: const Icon(Icons.whatsapp, color: Colors.green), onPressed: () => _sendWa(item['phone'] ?? '', 'नमस्ते ${item['name']} जी, $shopName का ₹${item['amount']} बकाया है। कृपया भुगतान करें।')),
                             IconButton(
                               icon: const Icon(Icons.check_circle, color: Colors.blue),
-                              tooltip: 'चुकता & रसीद',
-                              onPressed: () => _settlePayment(i),
+                              onPressed: () {
+                                _sendWa(item['phone'] ?? '', '🧾 *भुगतान रसीद*\nदुकान: $shopName\nग्राहक: ${item['name']}\nराशि: ₹${item['amount']} (PAID)\nदिनांक: ${DateTime.now().toString().split(' ')[0]}\nधन्यवाद!');
+                                setState(() => khata.removeAt(i));
+                                _save('k_data', khata);
+                              },
                             ),
                           ],
                         ),
                       ),
                     );
                   },
-          
+                ),
+        ),
+        FloatingActionButton(
+          onPressed: () {
+            final n = TextEditingController(), p = TextEditingController(), w = TextEditingController(), a = TextEditingController();
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('नया उधार'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(controller: n, decoration: const InputDecoration(labelText: 'नाम *')),
+                  TextField(controller: p, decoration: const InputDecoration(labelText: 'मोबाइल')),
+                  TextField(controller: w, decoration: const InputDecoration(labelText: 'काम')),
+                  TextField(controller: a, decoration: const InputDecoration(labelText: 'रकम (₹) *'), keyboardType: TextInputType.number),
+                ]),
+                actions: [
+                  ElevatedButton(
+                    onPressed: () {
+                      if (n.text.isNotEmpty && a.text.isNotEmpty) {
+                        setState(() => khata.add({'name': n.text, 'phone': p.text, 'work': w.text, 'amount': double.tryParse(a.text) ?? 0.0}));
+                        _save('k_data', khata);
+                        Navigator.pop(ctx);
+                      }
+                    },
+                    child: const Text('जोड़ें'),
+                  )
+                ],
+              ),
+            );
+          },
+          child: const Icon(Icons.add),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  // 2. कैश / बैंक स्क्रीन
+  Widget _tabCash() {
+    double getBal(String acc) {
+      double b = 0;
+      for (var t in cash) if (t['acc'] == acc) b += (t['t'] == 'In' ? (t['amount'] as num).toDouble() : -(t['amount'] as num).toDouble());
+      return b;
+    }
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          color: Colors.teal.shade50,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              Text('गल्ला: ₹${getBal('Cash')}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+              Text('SBI: ₹${getBal('SBI')}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+              Text('PNB: ₹${getBal('PNB')}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: cash.isEmpty
+              ? const Center(child: Text('कोई एंट्री नहीं है।'))
+              : ListView.builder(
+                  itemCount: cash.length,
+                  itemBuilder: (ctx, i) {
+                    final item = cash[i];
+                    final isIn = item['t'] == 'In';
+                    return ListTile(
+                      leading: Icon(isIn ? Icons.arrow_downward : Icons.arrow_upward, color: isIn ? Colors.green : Colors.red),
+                      title: Text(item['cat'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('${item['acc']} • ${item['desc']}'),
+                      trailing: Text('${isIn ? '+' : '-'} ₹${item['amount']}', style: TextStyle(color: isIn ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+                    );
+                  },
+                ),
+        ),
+        FloatingActionButton(
+          onPressed: () {
+            final a = TextEditingController(), d = TextEditingController();
+            String cat = 'ई-मित्र टोकन', acc = 'Cash', t = 'In';
+            showDialog(
+              context: context,
+              builder: (ctx) => StatefulBuilder(
+                builder: (ctx, setD) => AlertDialog(
+                  title: const Text('एंट्री जोड़ें'),
+                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+                    DropdownButton<String>(value: t, isExpanded: true, items: const [DropdownMenuItem(value: 'In', child: Text('आवक (+)')), DropdownMenuItem(value: 'Out', child: Text('खर्च (-)'))], onChanged: (v) => setD(() => t = v!)),
+                    DropdownButton<String>(value: acc, isExpanded: true, items: const [DropdownMenuItem(value: 'Cash', child: Text('गल्ला (Cash)')), DropdownMenuItem(value: 'SBI', child: Text('SBI खाता')), DropdownMenuItem(value: 'PNB', child: Text('PNB खाता'))], onChanged: (v) => setD(() => acc = v!)),
+                    TextField(controller: a, decoration: const InputDecoration(labelText: 'राशि (₹)'), keyboardType: TextInputType.number),
+                    TextField(controller: d, decoration: const InputDecoration(labelText: 'विवरण')),
+                  ]),
+                  actions: [
+                    ElevatedButton(
+                      onPressed: () {
+                        if (a.text.isNotEmpty) {
+                          setState(() => cash.insert(0, {'cat': cat, 'acc': acc, 't': t, 'amount': double.tryParse(a.text) ?? 0.0, 'desc': d.text}));
+                          _save('c_data', cash);
+                          Navigator.pop(ctx);
+                        }
+                      },
+                      child: const Text('सेव करें'),
+                    )
+                  ],
+                ),
+              ),
+            );
+          },
+          child: const Icon(Icons.add),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  // 3. वर्क डायरी
+  Widget _tabWork() {
+    return Column(
+      children: [
+        Expanded(
+          child: work.isEmpty
+              ? const Center(child: Text('कोई काम पेंडिंग नहीं है।'))
+              : ListView.builder(
+                  itemCount: work.length,
+                  itemBuilder: (ctx, i) {
+                    final item = work[i];
+                    bool done = item['st'] == 'Done';
+                    return ListTile(
+                      leading: Icon(done ? Icons.check_circle : Icons.hourglass_top, color: done ? Colors.green : Colors.orange),
+                      title: Text('${item['name']} - ${item['work']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('टोकन: ${item['token']} | स्थिति: ${item['st']}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(icon: const Icon(Icons.whatsapp, color: Colors.green), onPressed: () => _sendWa(item['phone'] ?? '', 'नमस्ते ${item['name']} जी, आपका कार्य (${item['work']}) टोकन: ${item['token']} तैयार है। दुकान $shopName से प्राप्त कर लें।')),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.grey),
+                            onPressed: () {
+                              setState(() => work.removeAt(i));
+                              _save('w_data', work);
+                            },
+                          )
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+        FloatingActionButton(
+          onPressed: () {
+            final n = TextEditingController(), p = TextEditingController(), w = TextEditingController(), tk = TextEditingController();
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('नया काम दर्ज करें'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(controller: n, decoration: const InputDecoration(labelText: 'ग्राहक का नाम *')),
+                  TextField(controller: p, decoration: const InputDecoration(labelText: 'मोबाइल')),
+                  TextField(controller: w, decoration: const InputDecoration(labelText: 'काम (जाति/मूल/फॉर्म)')),
+                  TextField(controller: tk, decoration: const InputDecoration(labelText: 'टोकन/आवेदन संख्या')),
+                ]),
+                actions: [
+                  ElevatedButton(
+                    onPressed: () {
+                      if (n.text.isNotEmpty) {
+                        setState(() => work.insert(0, {'name': n.text, 'phone': p.text, 'work': w.text, 'token': tk.text, 'st': 'Done'}));
+                        _save('w_data', work);
+                        Navigator.pop(ctx);
+                      }
+                    },
+                    child: const Text('सेव करें'),
+                  )
+                ],
+              ),
+            );
+          },
+          child: const Icon(Icons.add),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  // 4. नोट गिनती
+  Widget _tabNotes() {
+    int sum = 0;
+    notes.forEach((k, v) => sum += k * v);
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.teal.shade800,
+          child: Text('कुल गल्ला नकदी: ₹$sum', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+        ),
+        cons
