@@ -16,7 +16,7 @@ class ShopApp extends StatelessWidget {
       title: 'Shop Manager',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.indigo,
+        colorSchemeSeed: Colors.indigo,
         useMaterial3: true,
       ),
       home: const MainNavigationScreen(),
@@ -65,7 +65,7 @@ class KhataScreen extends StatefulWidget {
 }
 
 class _KhataScreenState extends State<KhataScreen> {
-  List> customers = [];
+  List customers = [];
 
   @override
   void initState() {
@@ -78,7 +78,7 @@ class _KhataScreenState extends State<KhataScreen> {
     final String? data = prefs.getString('khata_data');
     if (data != null) {
       setState(() {
-        customers = List>.from(json.decode(data));
+        customers = json.decode(data);
       });
     }
   }
@@ -100,10 +100,11 @@ class _KhataScreenState extends State<KhataScreen> {
         title: const Text('नया खाता / उधार जोड़ें'),
         content: SingleChildScrollView(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'ग्राहक का नाम')),
               TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'मोबाइल नंबर'), keyboardType: TextInputType.phone),
-              TextField(controller: workCtrl, decoration: const InputDecoration(labelText: 'काम का विवरण (फॉर्म/प्रिंट)')),
+              TextField(controller: workCtrl, decoration: const InputDecoration(labelText: 'काम का विवरण')),
               TextField(controller: amountCtrl, decoration: const InputDecoration(labelText: 'बकाया राशि (₹)'), keyboardType: TextInputType.number),
             ],
           ),
@@ -132,11 +133,11 @@ class _KhataScreenState extends State<KhataScreen> {
     );
   }
 
-  void _sendWhatsApp(String phone, String name, double amount) async {
+  void _sendWhatsApp(String phone, String name, dynamic amount) async {
     if (phone.isEmpty) return;
     final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
     final fullNumber = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
-    final msg = Uri.encodeComponent('नमस्ते $name जी, आपकी दुकान का बकाया ₹$amount है। कृपया यथाशीघ्र भुगतान करें। धन्यवाद!');
+    final msg = Uri.encodeComponent('नमस्ते $name जी, दुकान का बकाया ₹$amount है। कृपया भुगतान करें।');
     final url = Uri.parse('https://wa.me/$fullNumber?text=$msg');
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -145,7 +146,10 @@ class _KhataScreenState extends State<KhataScreen> {
 
   @override
   Widget build(BuildContext context) {
-    double totalDues = customers.fold(0.0, (sum, item) => sum + (item['amount'] as double));
+    double totalDues = 0.0;
+    for (var c in customers) {
+      totalDues += (c['amount'] ?? 0.0);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -176,15 +180,15 @@ class _KhataScreenState extends State<KhataScreen> {
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         child: ListTile(
-                          title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${item['work']} | ${item['phone']}'),
+                          title: Text(item['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('${item['work'] ?? ''} | ${item['phone'] ?? ''}'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text('₹${item['amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
                               IconButton(
                                 icon: const Icon(Icons.message, color: Colors.green),
-                                onPressed: () => _sendWhatsApp(item['phone'], item['name'], item['amount']),
+                                onPressed: () => _sendWhatsApp(item['phone'] ?? '', item['name'] ?? '', item['amount']),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.check_circle_outline, color: Colors.blue),
@@ -220,7 +224,7 @@ class CashRegisterScreen extends StatefulWidget {
 }
 
 class _CashRegisterScreenState extends State<CashRegisterScreen> {
-  List> transactions = [];
+  List transactions = [];
 
   @override
   void initState() {
@@ -233,7 +237,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
     final String? data = prefs.getString('cash_data');
     if (data != null) {
       setState(() {
-        transactions = List>.from(json.decode(data));
+        transactions = json.decode(data);
       });
     }
   }
@@ -256,6 +260,7 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
           title: const Text('दैनिक लेन-देन जोड़ें'),
           content: SingleChildScrollView(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'विवरण')),
                 TextField(controller: amtCtrl, decoration: const InputDecoration(labelText: 'राशि (₹)'), keyboardType: TextInputType.number),
@@ -307,8 +312,15 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    double totalIn = transactions.where((t) => t['type'].toString().contains('In')).fold(0.0, (s, t) => s + (t['amount'] as double));
-    double totalOut = transactions.where((t) => t['type'].toString().contains('Out')).fold(0.0, (s, t) => s + (t['amount'] as double));
+    double totalIn = 0.0;
+    double totalOut = 0.0;
+    for (var t in transactions) {
+      if (t['type'].toString().contains('In')) {
+        totalIn += (t['amount'] ?? 0.0);
+      } else {
+        totalOut += (t['amount'] ?? 0.0);
+      }
+    }
     double netBalance = totalIn - totalOut;
 
     return Scaffold(
@@ -341,8 +353,8 @@ class _CashRegisterScreenState extends State<CashRegisterScreen> {
                       final isIn = item['type'].toString().contains('In');
                       return ListTile(
                         leading: Icon(isIn ? Icons.arrow_downward : Icons.arrow_upward, color: isIn ? Colors.green : Colors.red),
-                        title: Text(item['desc']),
-                        subtitle: Text(item['mode']),
+                        title: Text(item['desc'] ?? ''),
+                        subtitle: Text(item['mode'] ?? ''),
                         trailing: Text(
                           '${isIn ? '+' : '-'} ₹${item['amount']}',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isIn ? Colors.green : Colors.red),
@@ -368,7 +380,7 @@ class JobAlertsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List> sampleAlerts = [
+    final alerts = [
       {'title': 'RPSC Programmer Admit Card 2026', 'date': 'अंतिम तिथि: 25/11/2026', 'link': 'https://rpsc.rajasthan.gov.in'},
       {'title': 'Rajasthan CET (Graduation / 12th) Result', 'date': 'अपडेटेड: 2026', 'link': 'https://rsmssb.rajasthan.gov.in'},
       {'title': 'Rajasthan LDC & Junior Assistant भर्ती', 'date': 'नोटिफिकेशन लाइव', 'link': 'https://sso.rajasthan.gov.in'},
@@ -377,14 +389,14 @@ class JobAlertsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('नवीनतम सरकारी योजना व जॉब अलर्ट'),
+        title: const Text('सरकारी योजना व जॉब अलर्ट'),
         backgroundColor: Colors.deepOrange,
         foregroundColor: Colors.white,
       ),
       body: ListView.builder(
-        itemCount: sampleAlerts.length,
+        itemCount: alerts.length,
         itemBuilder: (ctx, i) {
-          final alert = sampleAlerts[i];
+          final alert = alerts[i];
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: ListTile(
