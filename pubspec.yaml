@@ -1,16 +1,7 @@
-name: shop_manager
-description: "Sidharth Shop Management App"
-publish_to: "none"
-version: 1.0.0+1
-
-environment:
-  sdk: ">=3.0.0 <4.0.0"
-
 dependencies:
   flutter:
     sdk: flutter
   shared_preferences: ^2.2.2
   url_launcher: ^6.2.5
-
-flutter:
-  uses-material-design: true
+  pdf: ^3.10.8
+  printing: ^5.12.0
