@@ -119,7 +119,7 @@ class _ShopHomeState extends State<ShopHome> {
       KhataScreen(shopName: shopName, shopPhone: shopPhone, onShowQr: _showQr),
       const CashScreen(),
       const InventoryScreen(),
-      const VaultScreen(),
+      VaultScreen(shopName: shopName, shopPhone: shopPhone),
       ToolsScreen(onShowQr: _showQr),
     ];
 
