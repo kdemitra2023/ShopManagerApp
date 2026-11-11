@@ -43,10 +43,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void initState() {
     super.initState();
-    _loadShopProfile();
+    _loadProfile();
   }
 
-  void _loadShopProfile() async {
+  void _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       shopName = prefs.getString('shop_name') ?? 'Sidharth E-Mitra & Book Store';
@@ -56,7 +56,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
-  void _editShopProfileDialog() {
+  void _editProfileDialog() {
     final nameCtrl = TextEditingController(text: shopName);
     final addrCtrl = TextEditingController(text: shopAddress);
     final phoneCtrl = TextEditingController(text: shopPhone);
@@ -73,7 +73,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'दुकान का नाम')),
               TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'पता / मार्केट')),
               TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'मोबाइल नंबर'), keyboardType: TextInputType.phone),
-              TextField(controller: upiCtrl, decoration: const InputDecoration(labelText: 'UPI ID (QR के लिए)')),
+              TextField(controller: upiCtrl, decoration: const InputDecoration(labelText: 'UPI ID')),
             ],
           ),
         ),
@@ -101,9 +101,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  void _showUpiQrDialog(double amount, String note) {
-    final upiUrl = 'upi://pay?pa=$shopUpi&pn=${Uri.encodeComponent(shopName)}&am=$amount&cu=INR&tn=${Uri.encodeComponent(note)}';
-    final qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${Uri.encodeComponent(upiUrl)}';
+  void _showUpiQr(double amount) {
+    final upiUrl = 'upi://pay?pa=$shopUpi&pn=${Uri.encodeComponent(shopName)}&am=$amount&cu=INR';
+    final qrApi = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${Uri.encodeComponent(upiUrl)}';
 
     showDialog(
       context: context,
@@ -119,15 +119,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
               child: Image.network(
-                qrApiUrl,
-                height: 200,
-                width: 200,
-                loadingBuilder: (c, child, progress) => progress == null ? child : const SizedBox(height: 200, width: 200, child: Center(child: CircularProgressIndicator())),
-                errorBuilder: (c, e, s) => const Text('QR लोड करने में विफल'),
+                qrApi,
+                height: 180,
+                width: 180,
+                loadingBuilder: (c, child, p) => p == null ? child : const SizedBox(height: 180, width: 180, child: Center(child: CircularProgressIndicator())),
+                errorBuilder: (c, e, s) => const Text('QR लोड विफल'),
               ),
             ),
-            const SizedBox(height: 8),
-            const Text('PhonePe, GPay, Paytm से स्कैन करें', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
         actions: [
@@ -137,7 +135,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  void _sendDailyClosingReport() async {
+  void _sendClosingReport() async {
     final prefs = await SharedPreferences.getInstance();
     final String? cashRaw = prefs.getString('cash_data');
     final String? khataRaw = prefs.getString('khata_data');
@@ -194,7 +192,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  void _exportCsvDataDialog() async {
+  void _exportCsvDialog() async {
     final prefs = await SharedPreferences.getInstance();
     final String? khataRaw = prefs.getString('khata_data');
     final String? cashRaw = prefs.getString('cash_data');
@@ -230,11 +228,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         actions: [
           ElevatedButton.icon(
             icon: const Icon(Icons.copy),
-            label: const Text('कॉपी करें (Excel में पेस्ट करें)'),
+            label: const Text('कॉपी करें'),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: csv.toString()));
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('बैकअप डेटा क्लिपबोर्ड पर कॉपी हो गया!')));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('बैकअप डेटा कॉपी हो गया!')));
             },
           ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें')),
@@ -250,7 +248,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         shopName: shopName,
         shopPhone: shopPhone,
         shopAddress: shopAddress,
-        onShowQr: (amt) => _showUpiQrDialog(amt, 'उधार चुकता'),
+        onShowQr: _showUpiQr,
       ),
       const BankSplitCashRegister(),
       WorkDiaryScreen(shopName: shopName, shopPhone: shopPhone),
@@ -259,7 +257,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ShopToolsAndRatesScreen(
         shopName: shopName,
         shopPhone: shopPhone,
-        onGenerateCustomQr: (amt) => _showUpiQrDialog(amt, 'सेवा शुल्क'),
+        onGenerateCustomQr: _showUpiQr,
       ),
       const ExamCalendarScreen(),
     ];
@@ -276,26 +274,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner),
-            tooltip: 'दुकान UPI QR कोड',
-            onPressed: () => _showUpiQrDialog(0.0, 'दुकान भुगतान'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.send_to_mobile),
-            tooltip: 'WhatsApp क्लोजिंग रिपोर्ट',
-            onPressed: _sendDailyClosingReport,
-          ),
-          IconButton(
-            icon: const Icon(Icons.file_copy),
-            tooltip: 'Excel/CSV बैकअप',
-            onPressed: _exportCsvDataDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit_note),
-            tooltip: 'प्रोफ़ाइल बदलें',
-            onPressed: _editShopProfileDialog,
-          ),
+          IconButton(icon: const Icon(Icons.qr_code_scanner), tooltip: 'दुकान UPI QR कोड', onPressed: () => _showUpiQr(0.0)),
+          IconButton(icon: const Icon(Icons.send_to_mobile), tooltip: 'WhatsApp क्लोजिंग रिपोर्ट', onPressed: _sendClosingReport),
+          IconButton(icon: const Icon(Icons.file_copy), tooltip: 'Excel/CSV बैकअप', onPressed: _exportCsvDialog),
+          IconButton(icon: const Icon(Icons.edit_note), tooltip: 'प्रोफ़ाइल बदलें', onPressed: _editProfileDialog),
         ],
       ),
       body: screens[_currentIndex],
@@ -404,7 +386,7 @@ class _KhataScreenState extends State<KhataScreen> {
       '📌 *उधार रिमाइंडर / सूचना*\n'
       'दुकान: ${widget.shopName}\n'
       'प्रिय $name जी,\n'
-      'आपके द्वारा कराए गए कार्य ($work) का ₹$amount बकाया है।\n'
+      'आपके कार्य ($work) का ₹$amount बकाया है।\n'
       'कृपया समय पर भुगतान करें।\n'
       'संपर्क: ${widget.shopPhone}'
     );
@@ -510,4 +492,17 @@ class _KhataScreenState extends State<KhataScreen> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.message, color: Colors.green),
-                          
+                              tooltip: 'व्हाट्सएप तकाजा',
+                              onPressed: () => _sendReminder(item['phone'] ?? '', item['name'] ?? '', item['amount'], item['work'] ?? ''),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.check_circle, color: Colors.blue),
+                              tooltip: 'चुकता & रसीद',
+                              onPressed: () => _settlePayment(i),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+          
