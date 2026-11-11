@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
-import 'dart:io';
 
 void main() {
   runApp(const ShopApp());
@@ -150,7 +147,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     double cashBal = 0.0, sbiBal = 0.0, pnbBal = 0.0, totalIncome = 0.0, totalExpense = 0.0;
     for (var t in cashList) {
-      double amt = (t['amount'] ?? 0.0);
+      double amt = (t['amount'] as num?)?.toDouble() ?? 0.0;
       bool isIn = t['type'].toString().contains('In');
       if (isIn) {
         totalIncome += amt;
@@ -169,7 +166,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     double totalUdhar = 0.0;
     for (var k in khataList) {
-      totalUdhar += (k['amount'] ?? 0.0);
+      totalUdhar += (k['amount'] as num?)?.toDouble() ?? 0.0;
     }
 
     final date = DateTime.now().toString().split(' ')[0];
@@ -197,65 +194,53 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  void _exportExcelBackup() async {
+  void _exportCsvDataDialog() async {
     final prefs = await SharedPreferences.getInstance();
     final String? khataRaw = prefs.getString('khata_data');
     final String? cashRaw = prefs.getString('cash_data');
-    final String? ssoRaw = prefs.getString('sso_data');
-    final String? workRaw = prefs.getString('work_diary_data');
 
     final List khataList = khataRaw != null ? json.decode(khataRaw) : [];
     final List cashList = cashRaw != null ? json.decode(cashRaw) : [];
-    final List ssoList = ssoRaw != null ? json.decode(ssoRaw) : [];
-    final List workList = workRaw != null ? json.decode(workRaw) : [];
 
     StringBuffer csv = StringBuffer();
     csv.writeln('=== $shopName ===');
     csv.writeln('दिनांक: ${DateTime.now().toString().split(' ')[0]}');
     csv.writeln('');
-
-    csv.writeln('--- 1. ग्राहक उधार सूची ---');
-    csv.writeln('क्र.सं.,नाम,मोबाइल,काम,राशि (रु)');
+    csv.writeln('--- ग्राहक उधार सूची ---');
+    csv.writeln('क्र.सं.,नाम,मोबाइल,काम,राशि');
     for (int i = 0; i < khataList.length; i++) {
       final c = khataList[i];
-      csv.writeln('${i + 1},"${c['name']}","${c['phone']}","${c['work']}",${c['amount']}');
+      csv.writeln('${i + 1},${c['name']},${c['phone']},${c['work']},${c['amount']}');
     }
     csv.writeln('');
-
-    csv.writeln('--- 2. कैश & बैंक रजिस्टर ---');
-    csv.writeln('क्र.सं.,श्रेणी,खाता,प्रकार,राशि (रु),विवरण');
+    csv.writeln('--- कैश & बैंक रजिस्टर ---');
+    csv.writeln('क्र.सं.,श्रेणी,खाता,प्रकार,राशि,विवरण');
     for (int i = 0; i < cashList.length; i++) {
       final t = cashList[i];
-      csv.writeln('${i + 1},"${t['category']}","${t['account']}","${t['type']}",${t['amount']},"${t['desc']}"');
-    }
-    csv.writeln('');
-
-    csv.writeln('--- 3. ग्राहक SSO व दस्तावेज डायरेक्टरी ---');
-    csv.writeln('क्र.सं.,नाम,मोबाइल,SSO ID,जन आधार,आधार');
-    for (int i = 0; i < ssoList.length; i++) {
-      final s = ssoList[i];
-      csv.writeln('${i + 1},"${s['name']}","${s['phone']}","${s['sso']}","${s['jan']}","${s['aadhaar']}"');
-    }
-    csv.writeln('');
-
-    csv.writeln('--- 4. आवेदन व फॉर्म वर्क डायरी ---');
-    csv.writeln('क्र.सं.,ग्राहक,मोबाइल,कार्य,टोकन/आईडी,स्थिति');
-    for (int i = 0; i < workList.length; i++) {
-      final w = workList[i];
-      csv.writeln('${i + 1},"${w['name']}","${w['phone']}","${w['work']}","${w['token']}","${w['status']}"');
+      csv.writeln('${i + 1},${t['category']},${t['account']},${t['type']},${t['amount']},${t['desc']}');
     }
 
-    try {
-      final directory = await getTemporaryDirectory();
-      final path = '${directory.path}/Shop_Master_Backup_${DateTime.now().millisecondsSinceEpoch}.csv';
-      final file = File(path);
-      await file.writeAsString(csv.toString());
-      await Share.shareXFiles([XFile(path)], text: '$shopName - संपूर्ण बहीखाता व बैकअप');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('बैकअप त्रुटि: $e')));
-      }
-    }
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('बैकअप डेटा (CSV Format)'),
+        content: SingleChildScrollView(
+          child: Text(csv.toString(), style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+        ),
+        actions: [
+          ElevatedButton.icon(
+            icon: const Icon(Icons.copy),
+            label: const Text('कॉपी करें (Excel में पेस्ट करें)'),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: csv.toString()));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('बैकअप डेटा क्लिपबोर्ड पर कॉपी हो गया!')));
+            },
+          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -269,12 +254,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       const BankSplitCashRegister(),
       WorkDiaryScreen(shopName: shopName, shopPhone: shopPhone),
-      DenominationCounterScreen(),
+      const DenominationCounterScreen(),
       const CustomerVaultScreen(),
       ShopToolsAndRatesScreen(
         shopName: shopName,
         shopPhone: shopPhone,
-        onGenerateCustomQr: (amt) => _showUpiQrDialog(amt, 'ई-मित्र सेवा शुल्क'),
+        onGenerateCustomQr: (amt) => _showUpiQrDialog(amt, 'सेवा शुल्क'),
       ),
       const ExamCalendarScreen(),
     ];
@@ -302,9 +287,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             onPressed: _sendDailyClosingReport,
           ),
           IconButton(
-            icon: const Icon(Icons.file_download),
-            tooltip: 'Excel बैकअप',
-            onPressed: _exportExcelBackup,
+            icon: const Icon(Icons.file_copy),
+            tooltip: 'Excel/CSV बैकअप',
+            onPressed: _exportCsvDataDialog,
           ),
           IconButton(
             icon: const Icon(Icons.edit_note),
@@ -331,7 +316,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
-// ---------------- 1. खाता स्क्रीन & UPI QR ----------------
+// ---------------- 1. खाता स्क्रीन ----------------
 class KhataScreen extends StatefulWidget {
   final String shopName;
   final String shopPhone;
@@ -484,7 +469,7 @@ class _KhataScreenState extends State<KhataScreen> {
   Widget build(BuildContext context) {
     double totalDues = 0.0;
     for (var c in customers) {
-      totalDues += (c['amount'] ?? 0.0);
+      totalDues += (c['amount'] as num?)?.toDouble() ?? 0.0;
     }
 
     return Column(
@@ -515,4 +500,14 @@ class _KhataScreenState extends State<KhataScreen> {
                         subtitle: Text('${item['work'] ?? ''}\n📞 ${item['phone'] ?? ''}'),
                         isThreeLine: true,
                         trailing: Row(
-                          mainAx
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('₹${item['amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
+                            IconButton(
+                              icon: const Icon(Icons.qr_code, color: Colors.purple),
+                              tooltip: 'QR कोड',
+                              onPressed: () => widget.onShowQr((item['amount'] as num).toDouble()),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.message, color: Colors.green),
+                          
