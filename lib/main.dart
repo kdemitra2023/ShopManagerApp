@@ -182,7 +182,7 @@ class _ShopMainViewState extends State<ShopMainView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(shopName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-            Text('$shopAddress | 📞 $shopPhone', style: const TextStyle(fontSize: 10, color: Colors.white70)),
+            Text('$shopAddress \vert{} 📞 $shopPhone', style: const TextStyle(fontSize: 10, color: Colors.white70)),
           ],
         ),
         actions: [
@@ -248,7 +248,7 @@ class _ShopMainViewState extends State<ShopMainView> {
                       child: ListTile(
                         leading: const CircleAvatar(child: Icon(Icons.person)),
                         title: Text(item['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('${item['work']} | ${item['phone']}'),
+                        subtitle: Text('${item['work']} \vert{}${item['phone']}'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -341,7 +341,7 @@ class _ShopMainViewState extends State<ShopMainView> {
                     return ListTile(
                       leading: Icon(isIn ? Icons.arrow_downward : Icons.arrow_upward, color: isIn ? Colors.green : Colors.red),
                       title: Text(item['cat'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${item['acc']} • ${item['desc']}'),
+                      subtitle: Text('${item['acc']} •${item['desc']}'),
                       trailing: Text('${isIn ? '+' : '-'} ₹${item['amount']}', style: TextStyle(color: isIn ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
                     );
                   },
@@ -398,8 +398,8 @@ class _ShopMainViewState extends State<ShopMainView> {
                     bool done = item['st'] == 'Done';
                     return ListTile(
                       leading: Icon(done ? Icons.check_circle : Icons.hourglass_top, color: done ? Colors.green : Colors.orange),
-                      title: Text('${item['name']} - ${item['work']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('टोकन: ${item['token']} | स्थिति: ${item['st']}'),
+                      title: Text('${item['name']} -${item['work']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('टोकन: ${item['token']} \vert{} स्थिति: ${item['st']}'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -454,17 +454,5 @@ class _ShopMainViewState extends State<ShopMainView> {
 
   Widget _tabNotes() {
     int sum = 0;
-    notes.forEach((k, v) => sum += k * v);
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.teal.shade800,
-          alignment: Alignment.center,
-          child: Text(
-            'कुल गल्ला नकदी: ₹$sum',
-            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedB
+    notes.forEach((k, v) => sum += k *
+                  
