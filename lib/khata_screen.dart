@@ -50,11 +50,54 @@ class _KhataScreenState extends State<KhataScreen> {
     }
   }
 
+  // ग्राहक विवरण एडिट करने का डायलॉग
+  void _editCustomerDialog(int originalIndex) {
+    final item = khata[originalIndex];
+    final nCtrl = TextEditingController(text: item['n'] ?? '');
+    final pCtrl = TextEditingController(text: item['p'] ?? '');
+    final wCtrl = TextEditingController(text: item['w'] ?? '');
+    final aCtrl = TextEditingController(text: (item['a'] ?? '').toString());
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ग्राहक विवरण सुधारें (Edit)'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nCtrl, decoration: const InputDecoration(labelText: 'ग्राहक का नाम *')),
+              TextField(controller: pCtrl, decoration: const InputDecoration(labelText: 'मोबाइल नंबर'), keyboardType: TextInputType.phone),
+              TextField(controller: wCtrl, decoration: const InputDecoration(labelText: 'काम / विवरण')),
+              TextField(controller: aCtrl, decoration: const InputDecoration(labelText: 'बाकी रकम (₹) *'), keyboardType: TextInputType.number),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
+          ElevatedButton(
+            onPressed: () {
+              if (nCtrl.text.isNotEmpty && aCtrl.text.isNotEmpty) {
+                setState(() {
+                  khata[originalIndex]['n'] = nCtrl.text;
+                  khata[originalIndex]['p'] = pCtrl.text;
+                  khata[originalIndex]['w'] = wCtrl.text;
+                  khata[originalIndex]['a'] = double.tryParse(aCtrl.text) ?? 0.0;
+                });
+                _save();
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('अपडेट करें'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // केवल वही जिनका भुगतान अभी बाकी है (status != 'PAID')
     final pendingList = khata.where((k) => (k['st'] ?? 'PENDING') == 'PENDING').toList();
-    // जिनका भुगतान हो चुका है
     final paidList = khata.where((k) => (k['st'] ?? 'PENDING') == 'PAID').toList();
 
     double due = 0;
@@ -124,7 +167,21 @@ class _KhataScreenState extends State<KhataScreen> {
                           backgroundColor: isPaid ? Colors.green.shade100 : Colors.indigo.shade50,
                           child: Icon(isPaid ? Icons.check : Icons.person, color: isPaid ? Colors.green.shade800 : Colors.indigo),
                         ),
-                        title: Text('${it['n']} (₹${it['a']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text('${it['n']} (₹${it['a']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                            if (!isPaid)
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 18, color: Colors.blueGrey),
+                                tooltip: 'एडिट करें',
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                onPressed: () => _editCustomerDialog(originalIndex),
+                              ),
+                          ],
+                        ),
                         subtitle: Text('${it['w']} | 📞 ${it['p']}\nदिनांक: ${it['d'] ?? ''} ${isPaid ? '• [PAID]' : ''}', style: const TextStyle(fontSize: 11)),
                         isThreeLine: true,
                         trailing: isPaid
