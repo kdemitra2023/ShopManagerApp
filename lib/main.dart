@@ -6,6 +6,8 @@ import 'models.dart';
 import 'khata_screen.dart';
 import 'inventory_screen.dart';
 import 'tools_screen.dart';
+import 'cash_screen.dart';
+import 'vault_screen.dart';
 
 void main() => runApp(const MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -41,32 +43,29 @@ class _ShopHomeState extends State<ShopHome> {
     });
   }
 
-  // 1-टैप डायरेक्ट WhatsApp (नंबर सेव किए बिना)
-  void _openDirectWhatsApp(String phone, String msg) async {
-    final clean = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    final targetNum = clean.length == 10 ? '91$clean' : clean;
-    if (targetNum.isNotEmpty) {
-      final url = Uri.parse('https://wa.me/$targetNum?text=${Uri.encodeComponent(msg)}');
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      }
-    }
-  }
-
   void _showQr(double amt) {
     final u = 'upi://pay?pa=$shopUpi&pn=${Uri.encodeComponent(shopName)}&am=$amt&cu=INR';
     final q = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${Uri.encodeComponent(u)}';
     showDialog(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(shopName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(shopName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('राशि: ₹$amt', style: const TextStyle(fontSize: 20, color: Colors.green, fontWeight: FontWeight.bold)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+              child: Text('राशि: ₹$amt', style: const TextStyle(fontSize: 20, color: Colors.green, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 6),
             Text('UPI ID: $shopUpi', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 10),
-            Image.network(q, height: 180, width: 180, errorBuilder: (x, y, z) => const Text('QR त्रुटि')),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(q, height: 180, width: 180, errorBuilder: (x, y, z) => const Text('QR लोड विफल')),
+            ),
           ],
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('बंद करें'))],
@@ -116,43 +115,65 @@ class _ShopHomeState extends State<ShopHome> {
 
   @override
   Widget build(BuildContext context) {
-    Widget currentBody;
-    if (_tab == 0) {
-      currentBody = KhataScreen(
-        shopName: shopName,
-        shopPhone: shopPhone,
-        onShowQr: _showQr,
-      );
-    } else if (_tab == 1) {
-      currentBody = const InventoryScreen();
-    } else {
-      currentBody = ToolsScreen(onShowQr: _showQr);
-    }
+    final List<Widget> pages = [
+      KhataScreen(shopName: shopName, shopPhone: shopPhone, onShowQr: _showQr),
+      const CashScreen(),
+      const InventoryScreen(),
+      const VaultScreen(),
+      ToolsScreen(onShowQr: _showQr),
+    ];
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(shopName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-            Text('$shopAddress | 📞 $shopPhone', style: const TextStyle(fontSize: 10, color: Colors.white70)),
-          ],
+      backgroundColor: const Color(0xFFF4F6F9),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(70),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)]),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(shopName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                        Text('$shopAddress | 📞 $shopPhone', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.qr_code_2, color: Colors.white, size: 28),
+                    tooltip: 'दुकान QR',
+                    onPressed: () => _showQr(0),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings, color: Colors.white, size: 22),
+                    tooltip: 'सेटिंग',
+                    onPressed: _editProfile,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-        actions: [
-          IconButton(icon: const Icon(Icons.qr_code), tooltip: 'दुकान QR', onPressed: () => _showQr(0)),
-          IconButton(icon: const Icon(Icons.edit), tooltip: 'एडिट प्रोफाइल', onPressed: _editProfile),
-        ],
       ),
-      body: currentBody,
+      body: pages[_tab],
       bottomNavigationBar: NavigationBar(
+        height: 65,
+        elevation: 8,
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.menu_book), label: 'उधार खाता'),
-          NavigationDestination(icon: Icon(Icons.inventory_2), label: 'स्टेशनरी स्टॉक'),
-          NavigationDestination(icon: Icon(Icons.calculate), label: 'नोट & टूल्स'),
+          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book, color: Colors.indigo), label: 'उधार खाता'),
+          NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet, color: Colors.teal), label: 'कैश/बैंक'),
+          NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2, color: Colors.deepOrange), label: 'स्टॉक'),
+          NavigationDestination(icon: Icon(Icons.folder_shared_outlined), selectedIcon: Icon(Icons.folder_shared, color: Colors.purple), label: 'डायरी/SSO'),
+          NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view, color: Colors.blue), label: 'टूल्स & रेट'),
         ],
       ),
     );
