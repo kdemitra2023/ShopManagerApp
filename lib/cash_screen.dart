@@ -11,157 +11,266 @@ class CashScreen extends StatefulWidget {
 
 class _CashScreenState extends State<CashScreen> {
   List cash = [];
+  double openCash = 0.0;
+  double openSbi = 0.0;
+  double openPnb = 0.0;
+  int viewMode = 0; // 0 = आज (Daily), 1 = इस महीने (Monthly), 2 = सभी (All)
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadData();
   }
 
-  void _load() async {
+  void _loadData() async {
     final p = await SharedPreferences.getInstance();
     setState(() {
       cash = json.decode(p.getString('c_d') ?? '[]');
+      openCash = p.getDouble('op_cash') ?? 0.0;
+      openSbi = p.getDouble('op_sbi') ?? 0.0;
+      openPnb = p.getDouble('op_pnb') ?? 0.0;
     });
   }
 
-  void _save() async {
+  void _saveCash() async {
     final p = await SharedPreferences.getInstance();
     await p.setString('c_d', json.encode(cash));
   }
 
+  // ओपनिंग बैलेंस बदलने का डायलॉग
+  void _editOpeningBalance() {
+    final cCtrl = TextEditingController(text: openCash.toStringAsFixed(0));
+    final sCtrl = TextEditingController(text: openSbi.toStringAsFixed(0));
+    final pCtrl = TextEditingController(text: openPnb.toStringAsFixed(0));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ओपनिंग बैलेंस सेट करें'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: cCtrl, decoration: const InputDecoration(labelText: 'गल्ला नकद (Cash) ₹'), keyboardType: TextInputType.number),
+              TextField(controller: sCtrl, decoration: const InputDecoration(labelText: 'SBI खाता बैलेंस ₹'), keyboardType: TextInputType.number),
+              TextField(controller: pCtrl, decoration: const InputDecoration(labelText: 'PNB खाता बैलेंस ₹'), keyboardType: TextInputType.number),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द करें')),
+          ElevatedButton(
+            onPressed: () async {
+              final sp = await SharedPreferences.getInstance();
+              final nc = double.tryParse(cCtrl.text) ?? 0.0;
+              final ns = double.tryParse(sCtrl.text) ?? 0.0;
+              final np = double.tryParse(pCtrl.text) ?? 0.0;
+              await sp.setDouble('op_cash', nc);
+              await sp.setDouble('op_sbi', ns);
+              await sp.setDouble('op_pnb', np);
+              setState(() {
+                openCash = nc;
+                openSbi = ns;
+                openPnb = np;
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('सेव करें'),
+          ),
+        ],
+      ),
+    );
+  }
+
   double _getBal(String ac) {
-    double b = 0;
+    double base = (ac == 'Cash') ? openCash : (ac == 'SBI' ? openSbi : openPnb);
+    double diff = 0.0;
     for (var t in cash) {
       if (t['ac'] == ac) {
-        double a = (t['a'] as num?)?.toDouble() ?? 0;
-        b += (t['t'] == 'In' ? a : -a);
+        final a = (t['a'] as num?)?.toDouble() ?? 0.0;
+        diff += (t['t'] == 'In') ? a : -a;
       }
     }
-    return b;
+    return base + diff;
   }
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final monthStr = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+
+    List filteredList = [];
+    if (viewMode == 0) {
+      filteredList = cash.where((x) => (x['d'] ?? '').toString().startsWith(todayStr)).toList();
+    } else if (viewMode == 1) {
+      filteredList = cash.where((x) => (x['d'] ?? '').toString().startsWith(monthStr)).toList();
+    } else {
+      filteredList = cash;
+    }
+
+    double periodIn = 0.0, periodOut = 0.0;
+    for (var item in filteredList) {
+      final a = (item['a'] as num?)?.toDouble() ?? 0.0;
+      if (item['t'] == 'In') {
+        periodIn += a;
+      } else {
+        periodOut += a;
+      }
+    }
+
     return Column(
       children: [
+        // ऊपर बैलेंस समरी कार्ड + ओपनिंग बैलेंस एडिट बटन
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          color: Colors.teal.shade50,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          margin: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+          ),
+          child: Column(
             children: [
-              _tile('गल्ला (Cash)', _getBal('Cash'), Colors.orange.shade800),
-              _tile('SBI बैंक', _getBal('SBI'), Colors.blue.shade800),
-              _tile('PNB बैंक', _getBal('PNB'), Colors.purple.shade800),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('कुल चालू बैलेंस (Net Total)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey)),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 18, color: Colors.indigo),
+                    tooltip: 'ओपनिंग बैलेंस बदलें',
+                    onPressed: _editOpeningBalance,
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+              const Divider(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _balBox('गल्ला (Cash)', _getBal('Cash'), Colors.orange.shade800),
+                  _balBox('SBI खाता', _getBal('SBI'), Colors.blue.shade800),
+                  _balBox('PNB खाता', _getBal('PNB'), Colors.purple.shade800),
+                ],
+              ),
             ],
           ),
         ),
+
+        // दैनिक (Daily), मासिक (Monthly), और ऑल फ़िल्टर स्विच
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 0, label: Text('आज (Daily)')),
+              ButtonSegment(value: 1, label: Text('इस माह (Monthly)')),
+              ButtonSegment(value: 2, label: Text('पूरा रजिस्टर')),
+            ],
+            selected: {viewMode},
+            onSelectionChanged: (set) => setState(() => viewMode = set.first),
+          ),
+        ),
+
+        // चुने हुए समय की आवक/खर्च पट्टी
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('आवक: +₹$periodIn', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+              Text('खर्च: -₹$periodOut', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+              Text('बचत: ₹${periodIn - periodOut}', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold, fontSize: 13)),
+            ],
+          ),
+        ),
+
+        // लेन-देन की लिस्ट
         Expanded(
-          child: cash.isEmpty
-              ? const Center(child: Text('आज कोई एंट्री नहीं है।'))
+          child: filteredList.isEmpty
+              ? const Center(child: Text('इस अवधि में कोई लेन-देन नहीं है।', style: TextStyle(color: Colors.grey)))
               : ListView.builder(
-                  itemCount: cash.length,
-                  itemBuilder: (c, i) {
-                    final it = cash[i];
-                    bool isIn = it['t'] == 'In';
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: isIn ? Colors.green.shade100 : Colors.red.shade100,
-                        child: Icon(isIn ? Icons.arrow_downward : Icons.arrow_upward, color: isIn ? Colors.green : Colors.red),
-                      ),
-                      title: Text('${it['m']} (${it['ac']})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(it['d'] ?? ''),
-                      trailing: Text(
-                        '${isIn ? '+' : '-'} ₹${it['a']}',
-                        style: TextStyle(color: isIn ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 16),
+                  itemCount: filteredList.length,
+                  itemBuilder: (ctx, i) {
+                    final it = filteredList[i];
+                    final bool isIn = it['t'] == 'In';
+                    final origIdx = cash.indexOf(it);
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: isIn ? Colors.green.shade50 : Colors.red.shade50,
+                          child: Icon(isIn ? Icons.south_west : Icons.north_east, color: isIn ? Colors.green : Colors.red, size: 20),
+                        ),
+                        title: Text('${it['m']} (${it['ac']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: Text('${it['desc'] ?? ''}\nतारीख: ${it['d'] ?? ''}', style: const TextStyle(fontSize: 11)),
+                        isThreeLine: true,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${isIn ? '+' : '-'} ₹${it['a']}',
+                              style: TextStyle(color: isIn ? Colors.green.shade700 : Colors.red.shade700, fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 18),
+                              onPressed: () {
+                                setState(() => cash.removeAt(origIdx));
+                                _saveCash();
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
                 ),
         ),
-        FloatingActionButton(
-          child: const Icon(Icons.add),
-          onPressed: () {
-            final a = TextEditingController(), d = TextEditingController();
-            String ac = 'Cash', t = 'In', m = 'ई-मित्र टोकन';
-            final cats = ['ई-मित्र टोकन', 'फोटोकॉपी/प्रिंट', 'स्टेशनरी बिक्री', 'ऑनलाइन फॉर्म फीस', 'रिचार्ज/बिल', 'दुकान खर्च'];
 
-            showDialog(
-              context: context,
-              builder: (ctx) => StatefulBuilder(
-                builder: (ctx, setS) => AlertDialog(
-                  title: const Text('दैनिक लेन-देन दर्ज करें'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        DropdownButton<String>(
-                          value: t,
-                          isExpanded: true,
-                          items: const [
-                            DropdownMenuItem(value: 'In', child: Text('आवक / कमाई (+)')),
-                            DropdownMenuItem(value: 'Out', child: Text('खर्च / निकासी (-)')),
-                          ],
-                          onChanged: (v) => setS(() => t = v!),
-                        ),
-                        DropdownButton<String>(
-                          value: m,
-                          isExpanded: true,
-                          items: cats.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                          onChanged: (v) => setS(() => m = v!),
-                        ),
-                        DropdownButton<String>(
-                          value: ac,
-                          isExpanded: true,
-                          items: const [
-                            DropdownMenuItem(value: 'Cash', child: Text('गल्ला (Cash)')),
-                            DropdownMenuItem(value: 'SBI', child: Text('SBI खाता')),
-                            DropdownMenuItem(value: 'PNB', child: Text('PNB खाता')),
-                          ],
-                          onChanged: (v) => setS(() => ac = v!),
-                        ),
-                        TextField(controller: a, decoration: const InputDecoration(labelText: 'राशि (₹) *'), keyboardType: TextInputType.number),
-                        TextField(controller: d, decoration: const InputDecoration(labelText: 'विवरण / टिप्पणी')),
-                      ],
-                    ),
-                  ),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द')),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (a.text.isNotEmpty) {
-                          setState(() => cash.insert(0, {
-                                'm': m,
-                                'ac': ac,
-                                't': t,
-                                'a': double.tryParse(a.text) ?? 0.0,
-                                'd': d.text,
-                              }));
-                          _save();
-                          Navigator.pop(ctx);
-                        }
-                      },
-                      child: const Text('सेव करें'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 10),
-      ],
-    );
-  }
+        // नई एंट्री जोड़ने का फ्लोटिंग बटन
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Align(
+            alignment: Alignment.bottomRight,
+            child: FloatingActionButton.extended(
+              backgroundColor: Colors.teal.shade700,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('नई एंट्री'),
+              onPressed: () {
+                final amtCtrl = TextEditingController();
+                final descCtrl = TextEditingController();
+                String ac = 'Cash', t = 'In', cat = 'ई-मित्र टोकन';
 
-  Widget _tile(String t, double amt, Color col) {
-    return Column(
-      children: [
-        Text(t, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 3),
-        Text('₹$amt', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: col)),
-      ],
-    );
-  }
-}
+                showDialog(
+                  context: context,
+                  builder: (ctx) => StatefulBuilder(
+                    builder: (ctx, setD) => AlertDialog(
+                      title: const Text('कैश / बैंक एंट्री जोड़ें'),
+                      content: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            DropdownButton<String>(
+                              value: t,
+                              isExpanded: true,
+                              items: const [
+                                DropdownMenuItem(value: 'In', child: Text('आवक / जमा (+)')),
+                                DropdownMenuItem(value: 'Out', child: Text('खर्च / निकासी (-)')),
+                              ],
+                              onChanged: (v) => setD(() => t = v!),
+                            ),
+                            DropdownButton<String>(
+                              value: ac,
+                              isExpanded: true,
+                              items: const [
+                                DropdownMenuItem(value: 'Cash', child: Text('गल्ला (Cash)')),
+                                DropdownMenuItem(value: 'SBI', child: Text('SBI बैंक खाता')),
+                                DropdownMenuItem(value: 'PNB', child: Text('PNB बैंक खाता')),
+                              ],
+                              onChanged: (v) => set
+                              
