@@ -10,12 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Set up Flutter
@@ -23,18 +24,19 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Android Wrapper
-        run: flutter create . --platforms=android
+      - name: Recreate Android Project
+        run: |
+          flutter create --platforms=android --org com.sidharth.shopmanager .
 
       - name: Get Dependencies
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --split-per-abi
+        run: flutter build apk --debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ShopManager-Release-APK
-          path: build/app/outputs/flutter-apk/*.apk
+          name: ShopManager-Debug-APK
+          path: build/app/outputs/flutter-apk/app-debug.apk
           
